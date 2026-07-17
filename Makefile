@@ -1,4 +1,4 @@
-.PHONY: build run test clean frontend frontend-build frontend-dev frontend-deps \
+.PHONY: build run run-desktop test clean frontend frontend-build frontend-dev frontend-deps \
         daemon-start daemon-stop daemon-status daemon-restart
 
 BINARY = bin/server
@@ -12,6 +12,9 @@ build: frontend-deps frontend-build
 
 run: build
 	$(BINARY)
+
+run-desktop: build
+	$(BINARY) -desktop -addr $(ADDR)
 
 run-debug: frontend-deps frontend-build
 	GOCACHE=$(GOCACHE) go run -buildvcs=false ./cmd/server/ -addr :8080

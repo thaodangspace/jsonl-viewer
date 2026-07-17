@@ -16,9 +16,7 @@
   import TmuxSessionPicker from '$lib/components/TmuxSessionPicker.svelte';
   import TmuxTerminalModal from '$lib/components/TmuxTerminalModal.svelte';
   import TmuxWindowPicker from '$lib/components/TmuxWindowPicker.svelte';
-  import { tmuxSessionPickerOpen } from '$lib/stores/tmux.svelte.js';
-  import { findSession } from '$lib/utils/sessionCapabilities.js';
-  import { Terminal } from '@lucide/svelte';
+  import { handleTmuxPopState } from '$lib/stores/tmux.svelte.js';
 
   let isMobile = $state(false);
 
@@ -31,6 +29,7 @@
       isMobile = window.innerWidth <= 768;
     };
     window.addEventListener('resize', handleResize);
+    window.addEventListener('popstate', handleTmuxPopState);
 
     // Connect WebSocket
     connectWS();
@@ -117,6 +116,7 @@
     return () => {
       clearInterval(interval);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('popstate', handleTmuxPopState);
       unsubscribeSort();
       unsubscribeGroup();
     };
@@ -126,11 +126,6 @@
     newSessionModalOpen.set(true);
   }
 
-  let activeSessionInfo = $derived(findSession($sessions, $activeSession));
-
-  function openTmuxPicker() {
-    tmuxSessionPickerOpen.set(true);
-  }
 </script>
 
 <div class="flex h-screen">
@@ -173,14 +168,4 @@
   <!-- tmux Window Picker -->
   <TmuxWindowPicker />
 
-  <!-- Floating tmux Connect Button -->
-  {#if $activeSession && activeSessionInfo}
-    <button
-      class="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full shadow-lg bg-ctp-green text-ctp-crust hover:bg-ctp-green/90 transition-all hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer group hover:shadow-xl hover:shadow-ctp-green/20"
-      title="Connect to tmux session"
-      onclick={openTmuxPicker}
-    >
-      <Terminal size={20} class="group-hover:scale-110 transition-transform" />
-    </button>
-  {/if}
 </div>

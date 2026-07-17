@@ -3,13 +3,18 @@
   import { detectLanguageFromPath } from '$lib/utils/language.js';
   import { unescapeJsonString } from '$lib/utils/json.js';
   import DiffView from './DiffView.svelte';
+  import { applyCollapseDefault, toggleCollapseState } from '$lib/stores/collapseState.js';
   import { ChevronRight, ChevronDown, FileText, BookOpen, Terminal, Wrench } from '@lucide/svelte';
 
-  let { tc } = $props();
+  let { tc, stateKey } = $props();
   let collapsed = $state(true);
+  let collapseKey = $derived(stateKey || `tool:${tc.id || tc.name || 'unknown'}`);
+  let defaultCollapsed = $derived(
+    tc.name?.toLowerCase() === 'askuserquestion' ? (tc.result !== undefined && tc.result !== null) : true
+  );
 
   $effect(() => {
-    collapsed = tc.name?.toLowerCase() === 'askuserquestion' ? (tc.result !== undefined && tc.result !== null) : true;
+    collapsed = applyCollapseDefault(collapseKey, defaultCollapsed);
   });
 
   // Parse arguments for structured display
@@ -134,7 +139,7 @@
   let resultIsError = $derived(tc.resultIsError || false);
 
   function toggle() {
-    collapsed = !collapsed;
+    collapsed = toggleCollapseState(collapseKey, collapsed);
   }
 </script>
 

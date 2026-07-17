@@ -150,7 +150,14 @@ func (w *CodexWatcher) tailFile(path string) {
 			return
 		}
 
-		dec, err := jsonl.NewCodexDecoder(path, 0)
+		// Determine the starting offset: if the file already has content,
+		// seek to EOF so we only emit future appends as live events.
+		startOffset := int64(0)
+		if fi, err := os.Stat(path); err == nil && fi.Size() > 0 {
+			startOffset = fi.Size()
+		}
+
+		dec, err := jsonl.NewCodexDecoder(path, startOffset)
 		if err != nil {
 			log.Printf("[codex-watcher] open %s: %v", path, err)
 			return

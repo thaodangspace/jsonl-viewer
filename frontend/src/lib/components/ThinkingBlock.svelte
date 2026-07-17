@@ -1,12 +1,18 @@
 <script>
   import { escapeHTML } from '$lib/utils/markdown.js';
+  import { applyCollapseDefault, toggleCollapseState } from '$lib/stores/collapseState.js';
   import { ChevronRight, ChevronDown, Brain } from '@lucide/svelte';
 
-  let { content } = $props();
+  let { content, stateKey } = $props();
   let collapsed = $state(true);
+  let collapseKey = $derived(stateKey || 'thinking');
+
+  $effect(() => {
+    collapsed = applyCollapseDefault(collapseKey, true);
+  });
 
   function toggle() {
-    collapsed = !collapsed;
+    collapsed = toggleCollapseState(collapseKey, collapsed);
   }
 </script>
 

@@ -1,7 +1,7 @@
 <script>
   import { untrack } from 'svelte';
-  import { tmuxTerminalTarget } from '$lib/stores/tmux.svelte.js';
-  import { X, AlertTriangle } from '@lucide/svelte';
+  import { closeTmuxModals, tmuxTerminalTarget } from '$lib/stores/tmux.svelte.js';
+  import { ArrowLeft, X, AlertTriangle } from '@lucide/svelte';
   import { Terminal } from 'xterm';
   import { FitAddon } from 'xterm-addon-fit';
   import 'xterm/css/xterm.css';
@@ -205,6 +205,13 @@
       <!-- Header -->
       <div class="px-4 py-3 border-b border-ctp-surface0 flex items-center justify-between bg-ctp-crust">
         <div class="flex items-center gap-3">
+          <button
+            class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer"
+            title="Back"
+            onclick={closeTmuxModals}
+          >
+            <ArrowLeft size={16} />
+          </button>
           <span class="text-sm font-semibold text-ctp-text font-mono">
             {sessionName}{windowIndex !== null && windowIndex > 0 ? ':' + windowIndex : ''}
           </span>
@@ -227,7 +234,7 @@
           {/if}
           <button
             class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer"
-            onclick={closeTerminal}
+            onclick={closeTmuxModals}
           >
             <X class="h-4 w-4" />
           </button>
@@ -245,7 +252,7 @@
               <span class="text-sm text-ctp-text">Session ended</span>
               <button
                 class="ml-2 px-3 py-1 rounded text-xs font-medium bg-ctp-surface0 text-ctp-overlay0 hover:text-ctp-text transition-colors cursor-pointer"
-                onclick={closeTerminal}
+                onclick={closeTmuxModals}
               >
                 Close
               </button>

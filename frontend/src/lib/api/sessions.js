@@ -37,3 +37,19 @@ export async function markSessionRead(id, lineCount = 0) {
   if (!res.ok) throw new Error('Failed to mark session as read');
   return res.json();
 }
+
+/**
+ * Fetch a page of session history via HTTP cursor pagination.
+ * Returns { events, next_cursor, has_more, snapshot }.
+ */
+export async function fetchSessionHistory(id, { limit = 20, cursor = null, signal = null } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/history?${params}`, { signal });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`History fetch failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}

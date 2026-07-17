@@ -15,12 +15,19 @@
   import ScrollDownButton from './ScrollDownButton.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import FileMentionPalette from './FileMentionPalette.svelte';
+  import LoadingHistory from './LoadingHistory.svelte';
+  import EndOfHistory from './EndOfHistory.svelte';
+  import HistoryError from './HistoryError.svelte';
   import { isAtBottom, autoResize, syncHorizontalScroll } from '$lib/utils/scroll.js';
   import { computeDisplayGroups } from '$lib/utils/displayGroups.js';
   import { getRPCCOmmands, uploadImage, getAvailableModels, setModel, cycleModel } from '$lib/api/rpc.js';
   import { sessionCommands, commandsLoading } from '$lib/stores/commands.svelte.js';
   import { availableModels, setModelsForSession, clearModelsForSession } from '$lib/stores/models.svelte.js';
   import { findSession, readOnlySessionLabel, sessionSupportsRPC } from '$lib/utils/sessionCapabilities.js';
+  import {
+    getHasMore, getOlderLoading, getInitialLoading, getHistoryError,
+    loadOlderHistory, retryOlderHistory
+  } from '$lib/history/state.svelte.js';
 
   let input = $state('');
   let textareaEl = $state(null);
@@ -291,6 +298,9 @@
       // Wait for DOM to update with new messages
       await tick();
 
+      // Don't auto-scroll during initial history loading
+      if (getInitialLoading()) return;
+
       // Check if user has scrolled up (tracked by handleScroll on scroll events)
       let scrolledUp = false;
       userScrolledUp.subscribe(v => { scrolledUp = v; })();
@@ -323,6 +333,20 @@
       unsubSession();
       resizeObserver.disconnect();
     };
+  });
+
+  $effect(() => {
+    // When initial loading finishes, scroll to bottom once
+    const loading = getInitialLoading();
+    if (!loading && chatContainer) {
+      // Use a microtask to let the Svelte DOM update land first
+      Promise.resolve().then(async () => {
+        await tick();
+        if (chatContainer) {
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+      });
+    }
   });
 
   $effect(() => {
@@ -499,6 +523,49 @@
     } else {
       showScrollBtn = true;
     }
+
+    // Auto-load older history when scrolling near the top
+    const sessionId = $activeSession;
+    if (sessionId && chatContainer.scrollTop <= 200) {
+      if (getHasMore() && !getOlderLoading()) {
+        loadOlderPage(sessionId);
+      }
+    }
+  }
+
+  let olderPageLoading = false;
+
+  async function loadOlderPage(sessionID) {
+    if (olderPageLoading) return;
+    olderPageLoading = true;
+
+    try {
+      // Capture the current scroll anchor before prepending
+      const prevScrollHeight = chatContainer.scrollHeight;
+
+      const newModels = await loadOlderHistory(sessionID, (updater) => {
+        if (typeof updater === 'function') {
+          messages.update(updater);
+        } else {
+          messages.set(updater);
+        }
+      });
+
+      if (newModels && newModels.length > 0) {
+        // Prepend the new models to the messages store
+        messages.update(prev => [...newModels, ...prev]);
+
+        // Wait for Svelte to commit the DOM update
+        await tick();
+        await new Promise(r => requestAnimationFrame(r));
+
+        // Restore scroll position: shift down by the amount added
+        const newScrollHeight = chatContainer.scrollHeight;
+        chatContainer.scrollTop += (newScrollHeight - prevScrollHeight);
+      }
+    } finally {
+      olderPageLoading = false;
+    }
   }
 
   function checkHorizontalScroll() {
@@ -537,7 +604,9 @@
     onscroll={handleScroll}
     style="background-image:linear-gradient(90deg,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(1turn,rgba(60,10,30,.04) 3%,transparent 0);background-size:20px 20px;background-position:50%;"
   >
-    {#if $messages.length === 0}
+    {#if getInitialLoading()}
+      <LoadingHistory label="Loading session..." centered={true} />
+    {:else if $messages.length === 0}
       <div class="flex-1 flex items-center justify-center">
         <div class="text-center max-w-md px-4">
           <!-- Icon -->
@@ -583,6 +652,18 @@
         </div>
       </div>
     {:else}
+      <!-- History loading states at top of chat -->
+      {#if getOlderLoading()}
+        <LoadingHistory />
+      {:else if getHistoryError()}
+        <HistoryError error={getHistoryError()} onRetry={() => {
+          const sessionId = $activeSession;
+          if (sessionId) loadOlderPage(sessionId);
+        }} />
+      {:else if !getHasMore()}
+        <EndOfHistory />
+      {/if}
+
       {#each displayGroups as group (group.msg?.id || group.groupId)}
         {#if group.type === 'message'}
           {#if group.msg.role === 'user'}
@@ -601,9 +682,13 @@
           {/if}
         {:else if group.type === 'toolGroup'}
           {#if group.results.length === 1}
-            <ToolResultBlock msg={group.results[0]} />
+            {@const result = group.results[0]}
+            <ToolResultBlock
+              msg={result}
+              stateKey={`tool-result:${result.toolCallId || result.id || result.toolName || 'unknown'}`}
+            />
           {:else}
-            <ToolResultGroup results={group.results} />
+            <ToolResultGroup results={group.results} stateKey={`tool-result-group:${group.groupId}`} />
           {/if}
         {/if}
       {/each}

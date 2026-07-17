@@ -2,13 +2,15 @@
   import { escapeHTML, highlightCode } from '$lib/utils/markdown.js';
   import { detectLanguageFromPath } from '$lib/utils/language.js';
   import { unescapeJsonString } from '$lib/utils/json.js';
+  import { applyCollapseDefault, toggleCollapseState } from '$lib/stores/collapseState.js';
 
-  let { msg, standalone = true } = $props();
-  let collapsed = $state(true); 
+  let { msg, standalone = true, stateKey } = $props();
+  let collapsed = $state(true);
+  let collapseKey = $derived(stateKey || `tool-result:${msg.toolCallId || msg.id || msg.toolName || 'unknown'}`);
+  let defaultCollapsed = $derived(msg.toolName !== 'bash');
 
   $effect(() => {
-    // Reset collapsed state when msg changes
-    collapsed = msg.toolName !== 'bash';
+    collapsed = applyCollapseDefault(collapseKey, defaultCollapsed);
   });
 
   // Derive content and highlighted HTML from msg prop
@@ -47,7 +49,7 @@
   }
 
   function toggle() {
-    collapsed = !collapsed;
+    collapsed = toggleCollapseState(collapseKey, collapsed);
   }
 </script>
 

@@ -5,6 +5,7 @@
   import ThinkingBlock from './ThinkingBlock.svelte';
   import ToolCallBlock from './ToolCallBlock.svelte';
   import ImageViewer from './ImageViewer.svelte';
+  import { applyCollapseDefault, toggleCollapseState } from '$lib/stores/collapseState.js';
   import { ChevronRight, ChevronDown, Wrench } from '@lucide/svelte';
 
   let { msg } = $props();
@@ -22,6 +23,11 @@
 
   // Tool section collapse state
   let toolsCollapsed = $state(false);
+  let toolsCollapseKey = $derived(`assistant-tools:${msg.id || 'unknown'}`);
+
+  $effect(() => {
+    toolsCollapsed = applyCollapseDefault(toolsCollapseKey, false);
+  });
 
   // Image viewer state
   let showViewer = $state(false);
@@ -79,6 +85,10 @@
 
   function handleMouseLeave() {
     showTranslateBtn = false;
+  }
+
+  function toggleTools() {
+    toolsCollapsed = toggleCollapseState(toolsCollapseKey, toolsCollapsed);
   }
 </script>
 
@@ -141,7 +151,7 @@
 
     <!-- Thinking block -->
     {#if thinking}
-      <ThinkingBlock content={thinking} />
+      <ThinkingBlock content={thinking} stateKey={`thinking:${msg.id || 'unknown'}`} />
     {/if}
 
     <!-- Tools section (grouped hierarchy) -->
@@ -152,7 +162,7 @@
       >
         <button
           class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer"
-          onclick={() => toolsCollapsed = !toolsCollapsed}
+          onclick={toggleTools}
         >
           <span class="flex items-center">
             {#if toolsCollapsed}
@@ -166,8 +176,9 @@
           <span class="text-ctp-overlay0 text-[10px] ml-auto">{toolCalls.length} tool{toolCalls.length > 1 ? 's' : ''}</span>
         </button>
         <div class="border-t border-ctp-surface0 px-2 pt-2" class:hidden={toolsCollapsed}>
-          {#each toolCalls as tc (tc.id)}
-            <ToolCallBlock {tc} />
+          {#each toolCalls as tc, i (tc.id || `${msg.id || 'assistant'}-tool-${i}-${tc.name || 'unknown'}`)}
+            {@const toolKey = `tool:${msg.id || 'assistant'}:${tc.id || `${i}:${tc.name || 'unknown'}`}`}
+            <ToolCallBlock {tc} stateKey={toolKey} />
           {/each}
         </div>
       </div>

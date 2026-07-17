@@ -1,8 +1,18 @@
 <script>
   import ToolResultBlock from './ToolResultBlock.svelte';
+  import { applyCollapseDefault, toggleCollapseState } from '$lib/stores/collapseState.js';
 
-  let { results } = $props();
+  let { results, stateKey } = $props();
   let collapsed = $state(false);
+  let collapseKey = $derived(stateKey || `tool-result-group:${results.map(r => r.toolCallId || r.id || r.toolName || 'unknown').join(':')}`);
+
+  $effect(() => {
+    collapsed = applyCollapseDefault(collapseKey, false);
+  });
+
+  function toggle() {
+    collapsed = toggleCollapseState(collapseKey, collapsed);
+  }
 </script>
 
 <div class="flex flex-col items-start animate-fadeIn w-full">
@@ -11,7 +21,7 @@
     <!-- Header -->
     <button
       class="w-full flex items-center gap-2 px-3 py-2 text-xs cursor-pointer"
-      onclick={() => collapsed = !collapsed}
+      onclick={toggle}
     >
       <span
         class="transition-transform duration-200 text-[10px]"
@@ -25,11 +35,12 @@
     <!-- Individual results (shown when expanded) -->
     {#if !collapsed}
       <div>
-        {#each results as result, i}
+        {#each results as result, i (result.toolCallId || result.id || `${result.toolName || 'result'}-${i}`)}
           {#if i > 0}
             <div class="border-t border-ctp-surface0/30"></div>
           {/if}
-          <ToolResultBlock msg={result} standalone={false} />
+          {@const resultKey = `tool-result:${result.toolCallId || result.id || `${result.toolName || 'result'}-${i}`}`}
+          <ToolResultBlock msg={result} standalone={false} stateKey={resultKey} />
         {/each}
       </div>
     {/if}

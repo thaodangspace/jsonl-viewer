@@ -29,3 +29,5 @@ internal/server/static/dist/assets/
 *.db
 *.sqlite
 *.sqlite3
+
+.cache

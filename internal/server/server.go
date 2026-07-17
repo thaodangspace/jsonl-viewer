@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"agent-reader/internal/fsbrowse"
+	"agent-reader/internal/history"
 	"agent-reader/internal/hub"
 	"agent-reader/internal/jsonl"
 	"agent-reader/internal/llm"
@@ -36,12 +38,14 @@ import (
 //go:embed static/dist/*
 var staticFS embed.FS
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+const (
+	desktopOriginTauri = "tauri://localhost"
+	desktopOriginHTTP  = "http://tauri.localhost"
+)
+
+var allowedDesktopOrigins = map[string]struct{}{
+	desktopOriginTauri: {},
+	desktopOriginHTTP:  {},
 }
 
 // rpcManager manages active RPC sessions.
@@ -87,12 +91,14 @@ type Server struct {
 	codexSessionsDir  string
 	fsbrowse          *fsbrowse.Service   // filesystem browsing service (may be nil)
 	llmClient         *llm.LMStudioClient // local LLM client for translation
+	historyService    *history.Service
 	tmuxAttachers     map[string]*tmux.SessionAttach
 	tmuxAttachMu      sync.Mutex
+	desktop           bool
 }
 
 // New creates a new Server.
-func New(sessionsDir, claudeProjectsDir, codexSessionsDir, allowedRootsCSV string) (*Server, error) {
+func New(sessionsDir, claudeProjectsDir, codexSessionsDir, allowedRootsCSV string, desktop bool) (*Server, error) {
 	w, err := watcher.New(sessionsDir)
 	if err != nil {
 		return nil, fmt.Errorf("create watcher: %w", err)
@@ -111,11 +117,13 @@ func New(sessionsDir, claudeProjectsDir, codexSessionsDir, allowedRootsCSV strin
 		watcher:           w,
 		rpcMgr:            newRPCManager(),
 		readTracker:       rt,
+		historyService:    history.NewService(),
 		sessionsDir:       sessionsDir,
 		claudeProjectsDir: claudeProjectsDir,
 		codexSessionsDir:  codexSessionsDir,
 		llmClient:         llm.NewLMStudioClient(),
 		tmuxAttachers:     make(map[string]*tmux.SessionAttach),
+		desktop:           desktop,
 	}
 
 	log.Printf("[server] read tracker initialized (24h TTL) at %s", dbPath)
@@ -160,8 +168,10 @@ func New(sessionsDir, claudeProjectsDir, codexSessionsDir, allowedRootsCSV strin
 }
 
 // Start launches the HTTP server on the given address.
-func (s *Server) Start(addr string) error {
+func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/healthz", s.handleHealthz)
 
 	// WebSocket endpoint
 	mux.HandleFunc("/ws", s.handleWS)
@@ -170,6 +180,7 @@ func (s *Server) Start(addr string) error {
 	mux.HandleFunc("/api/sessions", s.handleSessions)
 	mux.HandleFunc("/api/sessions/create", s.handleSessionCreate)
 	mux.HandleFunc("/api/sessions/unread", s.handleUnreadIDs)
+	mux.HandleFunc("GET /api/sessions/{id}/history", s.handleSessionHistory)
 	mux.HandleFunc("/api/sessions/", s.handleSessionByID)
 
 	// RPC endpoints
@@ -210,11 +221,19 @@ func (s *Server) Start(addr string) error {
 		mux.Handle("/", http.FileServer(http.Dir("internal/server/static/dist")))
 	}
 
+	return s.withDesktopCORS(mux)
+}
+
+// Start launches the HTTP server on the given address.
+func (s *Server) Start(addr string) error {
+	handler := s.handler()
+
 	log.Printf("[server] listening on %s", addr)
 	log.Printf("[server] WebSocket: ws://localhost%s/ws", addr[strings.Index(addr, ":"):])
 	log.Printf("[server] Sessions dir: %s", s.sessionsDir)
 
-	s.hub.SetSubscribeCallback(s.onSubscribe)
+	// History is now delivered via HTTP cursor pagination (GET /api/sessions/{id}/history).
+	// onSubscribe is no longer registered; WebSocket is reserved for live events only.
 	go s.hub.Run()
 	go s.hub.SubscribeWatcher(s.watcher)
 	s.watcher.Start()
@@ -228,7 +247,79 @@ func (s *Server) Start(addr string) error {
 		s.codexWatcher.Start()
 	}
 
-	return http.ListenAndServe(addr, mux)
+	return http.ListenAndServe(addr, handler)
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+func (s *Server) withDesktopCORS(next http.Handler) http.Handler {
+	if !s.desktop {
+		return next
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if isDesktopCORSPath(r.URL.Path) && isAllowedDesktopOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) websocketUpgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     s.checkWSOrigin,
+	}
+}
+
+func (s *Server) checkWSOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if s.desktop && isAllowedDesktopOrigin(origin) {
+		return true
+	}
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
+}
+
+func isAllowedDesktopOrigin(origin string) bool {
+	if _, ok := allowedDesktopOrigins[origin]; ok {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+func isDesktopCORSPath(path string) bool {
+	return strings.HasPrefix(path, "/api/") || path == "/healthz"
 }
 
 // Stop gracefully shuts down the server.
@@ -263,6 +354,7 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	upgrader := s.websocketUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[server] upgrade error: %v", err)
@@ -418,6 +510,73 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		"sessions": sessions,
 		"total":    total,
 	})
+}
+
+// handleSessionHistory serves paginated history via GET /api/sessions/{id}/history.
+// Query params: ?limit=N (default 20, max 50), &cursor=... (for previous pages).
+func (s *Server) handleSessionHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "missing session id", http.StatusNotFound)
+		return
+	}
+
+	// Find the session file and agent
+	sessions := s.listSessions()
+	var sessionFile, sessionAgent string
+	for i := range sessions {
+		if sessions[i].ID == id {
+			sessionFile = sessions[i].File
+			sessionAgent = sessions[i].Agent
+			break
+		}
+	}
+	if sessionFile == "" {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+
+	// Parse limit
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	cursorStr := r.URL.Query().Get("cursor")
+
+	var page *history.Page
+	var err error
+
+	if cursorStr != "" {
+		page, err = s.historyService.LoadPrevious(id, sessionAgent, sessionFile, cursorStr, limit)
+	} else {
+		page, err = s.historyService.LoadLatest(id, sessionAgent, sessionFile, limit)
+	}
+
+	if err != nil {
+		switch {
+		case err == history.ErrSessionNotFound:
+			http.Error(w, "session not found", http.StatusNotFound)
+		case err == history.ErrInvalidCursor:
+			http.Error(w, "invalid cursor", http.StatusBadRequest)
+		case err == history.ErrHistoryChanged:
+			http.Error(w, "history changed", http.StatusConflict)
+		default:
+			log.Printf("[server] history error for session %s: %v", id, err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(page)
 }
 
 func (s *Server) handleSessionByID(w http.ResponseWriter, r *http.Request) {
@@ -1353,8 +1512,15 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 
 // ===== WebSocket =====
 
-// onSubscribe is called when a WebSocket client subscribes to a session.
+// onSubscribe was previously called by the hub when a WebSocket client subscribed to a session.
+// As of history lazy-loading (Jul 2026), history is delivered via HTTP cursor pagination
+// (GET /api/sessions/{id}/history) and the hub no longer invokes this callback.
+// Kept as reference; remove in a future cleanup if no tmux or other path depends on it.
 func (s *Server) onSubscribe(sessionID string, client *hub.Client) {
+	_ = sessionID
+	_ = client
+	// Legacy replay logic removed — see git history for the original implementation.
+	return
 	sessions := s.listSessions()
 	var sessionFile string
 	var sessionAgent string
@@ -1673,6 +1839,7 @@ func (s *Server) handleTmuxWS(w http.ResponseWriter, r *http.Request) {
 		attachKey = fmt.Sprintf("%s:%d", sessionName, windowIndex)
 	}
 
+	upgrader := s.websocketUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[server] tmux ws upgrade error: %v", err)

@@ -261,16 +261,14 @@ func (c *Client) handleMessage(msg ClientMessage) {
 		c.send <- data
 
 	case "subscribe":
+		// Replace subscription: each client subscribes to exactly one session at a time.
+		// This replaces rather than accumulates; history is delivered via HTTP, not WS.
+		c.subscribe = make(map[string]bool)
 		if msg.SessionID != "" {
 			c.subscribe[msg.SessionID] = true
 		}
 		c.project = msg.Project
 		log.Printf("[hub] client subscribed: session=%s project=%s", msg.SessionID, msg.Project)
-
-		// Replay existing session events
-		if msg.SessionID != "" && c.hub.subscribeCallback != nil {
-			go c.hub.subscribeCallback(msg.SessionID, c)
-		}
 
 	case "unsubscribe":
 		if msg.SessionID != "" {

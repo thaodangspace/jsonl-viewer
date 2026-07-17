@@ -41,6 +41,7 @@ func main() {
 	claudeProjectsDir := flag.String("claude-projects", "", "Path to ~/.claude/projects directory")
 	codexSessionsDir := flag.String("codex-sessions", "", "Path to ~/.codex/sessions directory")
 	allowedRoots := flag.String("roots", "", "Comma-separated allowed root folders for filesystem API")
+	desktop := flag.Bool("desktop", false, "Enable Tauri desktop app CORS and WebSocket origins")
 	flag.Parse()
 
 	// Load .env file (looks in current dir)
@@ -95,7 +96,7 @@ func main() {
 		log.Fatalf("sessions path is not a directory: %s", *sessionsDir)
 	}
 
-	srv, err := server.New(*sessionsDir, *claudeProjectsDir, *codexSessionsDir, *allowedRoots)
+	srv, err := server.New(*sessionsDir, *claudeProjectsDir, *codexSessionsDir, *allowedRoots, *desktop)
 	if err != nil {
 		log.Fatalf("create server: %v", err)
 	}
@@ -104,6 +105,9 @@ func main() {
 		log.Printf("[main] Allowed filesystem roots: %s", *allowedRoots)
 	} else {
 		log.Printf("[main] No allowed filesystem roots configured (fsbrowse API disabled)")
+	}
+	if *desktop {
+		log.Printf("[main] Desktop mode enabled")
 	}
 
 	// Graceful shutdown

@@ -155,8 +155,16 @@ func (w *Watcher) tailFile(path string) {
 	w.mu.Unlock()
 
 	if !exists {
+		// Determine the starting offset: if the file already has content,
+		// seek to EOF so we only emit future appends as live events.
+		// If the file was just created (size 0), start at offset 0.
+		startOffset := int64(0)
+		if fi, err := os.Stat(path); err == nil && fi.Size() > 0 {
+			startOffset = fi.Size()
+		}
+
 		var err error
-		dec, err = jsonl.NewDecoder(path, 0)
+		dec, err = jsonl.NewDecoder(path, startOffset)
 		if err != nil {
 			log.Printf("[watcher] open %s: %v", path, err)
 			return

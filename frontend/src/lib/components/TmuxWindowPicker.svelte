@@ -1,8 +1,6 @@
 <script>
-  import { tmuxWindowPickerOpen, tmuxTerminalTarget, tmuxSessionPickerOpen } from '$lib/stores/tmux.svelte.js';
+  import { backToTmuxSessionPicker, dismissTmuxModals, openTmuxTerminal, tmuxWindowPickerOpen } from '$lib/stores/tmux.svelte.js';
   import { fetchTmuxWindows } from '$lib/api/tmux.js';
-  import { activeSession, sessions as appSessions } from '$lib/stores/session.svelte.js';
-  import { findSession } from '$lib/utils/sessionCapabilities.js';
   import { Terminal, X, ArrowLeft, ArrowRight } from '@lucide/svelte';
 
   let sessionName = $state('');
@@ -10,26 +8,6 @@
   let loading = $state(false);
   let error = $state('');
 
-  let activeSessionInfo = $derived(findSession($appSessions, $activeSession));
-  let projectDir = $derived(activeSessionInfo?.cwd || '');
-
-  function pathContains(projectDir, path) {
-    if (!path || !projectDir) return false;
-    const p1 = path.replace(/\/$/, '');
-    const p2 = projectDir.replace(/\/$/, '');
-    return p1 === p2 || p1.startsWith(p2 + '/');
-  }
-
-  let filteredWindows = $derived.by(() => {
-    if (!projectDir) return windows;
-    return windows.filter(win => {
-      const sessionId = activeSessionInfo?.id;
-      const projectName = activeSessionInfo?.project;
-      if (sessionId && win.name && win.name.toLowerCase().includes(sessionId.toLowerCase())) return true;
-      if (projectName && win.name && win.name.toLowerCase().includes(projectName.toLowerCase())) return true;
-      return pathContains(projectDir, win.path);
-    });
-  });
 
   async function loadWindows() {
     loading = true;
@@ -43,14 +21,16 @@
     }
   }
 
+  function back() {
+    backToTmuxSessionPicker();
+  }
+
   function close() {
-    tmuxWindowPickerOpen.set(false);
-    tmuxSessionPickerOpen.set(true);
+    dismissTmuxModals();
   }
 
   function connect(windowIndex) {
-    tmuxWindowPickerOpen.set(false);
-    tmuxTerminalTarget.set({ session: sessionName, window: windowIndex });
+    openTmuxTerminal({ session: sessionName, window: windowIndex });
   }
 
   $effect(() => {
@@ -71,7 +51,7 @@
           <div class="flex items-center gap-3">
             <button
               class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer"
-              onclick={close}
+              onclick={back}
             >
               <ArrowLeft size={16} />
             </button>
@@ -103,13 +83,13 @@
                style="background:color-mix(in srgb, #e95f59 10%, #ffffff)">
             <span>{error}</span>
           </div>
-        {:else if filteredWindows.length === 0}
+        {:else if windows.length === 0}
           <div class="text-center py-8 text-ctp-overlay0 text-sm">
-            No matching windows found
+            No windows found
           </div>
         {:else}
           <div class="space-y-2">
-            {#each filteredWindows as win (win.index)}
+            {#each windows as win (win.index)}
               <button
                 class="w-full flex items-center justify-between px-4 py-3 bg-ctp-crust border border-ctp-surface0 rounded-lg hover:border-ctp-surface1 transition-colors cursor-pointer text-left"
                 onclick={() => connect(win.index)}
@@ -137,7 +117,7 @@
 
       <!-- Footer -->
       <div class="px-6 py-3 border-t border-ctp-surface0 flex justify-between items-center">
-        <span class="text-[11px] text-ctp-overlay0">{filteredWindows.length} window{filteredWindows.length !== 1 ? 's' : ''}</span>
+        <span class="text-[11px] text-ctp-overlay0">{windows.length} window{windows.length !== 1 ? 's' : ''}</span>
         <button
           class="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium text-ctp-overlay0 hover:text-ctp-text hover:bg-ctp-surface0 transition-colors cursor-pointer"
           onclick={loadWindows}

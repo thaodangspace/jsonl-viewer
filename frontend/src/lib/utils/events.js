@@ -4,6 +4,7 @@ import { isStreaming } from '$lib/stores/rpc.svelte.js';
 import { fetchSessions } from '$lib/api/sessions.js';
 import { detectLanguageFromPath } from '$lib/utils/language.js';
 import { unescapeJsonString } from '$lib/utils/json.js';
+import { makeEventKey } from '$lib/history/dedup.js';
 
 // Fallback for crypto.randomUUID() in non-secure contexts
 function generateId() {
@@ -19,6 +20,31 @@ function generateId() {
 
 // Deduplication
 const seenEvents = new Set();
+
+// Live event buffering during initial history load
+let _liveBufferActive = false;
+let _liveBuffer = [];
+let _activeSessionID = null;
+
+export function setLiveBufferActive(active) {
+  _liveBufferActive = active;
+  if (!active) {
+    _liveBuffer = [];
+  }
+}
+
+export function drainLiveBuffer() {
+  const buf = _liveBuffer;
+  _liveBuffer = [];
+  _liveBufferActive = false;
+  return buf;
+}
+
+export function setActiveSessionID(id) {
+  _activeSessionID = id;
+}
+
+export { seenEvents };
 
 export function clearSeenEvents() {
   seenEvents.clear();
@@ -43,9 +69,24 @@ export function onWSMessage(msg) {
   unsub();
   if (currentSession && msg.session_id !== currentSession) return;
 
-  // Deduplicate
-  if (data.id && seenEvents.has(data.id)) return;
-  if (data.id) seenEvents.add(data.id);
+  // Live buffer: hold events during initial history fetch
+  if (_liveBufferActive) {
+    // Deduplicate within the buffer itself
+    if (data.id) {
+      const key = makeEventKey(_activeSessionID || msg.session_id || '', data);
+      if (seenEvents.has(key)) return;
+      seenEvents.add(key);
+    }
+    _liveBuffer.push(msg);
+    return;
+  }
+
+  // Deduplicate using stable key: session:eventID
+  if (data.id) {
+    const key = makeEventKey(_activeSessionID || msg.session_id || '', data);
+    if (seenEvents.has(key)) return;
+    seenEvents.add(key);
+  }
 
   switch (data.type) {
     case 'agent_start':
