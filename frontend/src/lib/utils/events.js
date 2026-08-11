@@ -48,6 +48,7 @@ export { seenEvents };
 
 export function clearSeenEvents() {
   seenEvents.clear();
+  currentAssistantId = null;
 }
 
 // Tool Call Language Tracking

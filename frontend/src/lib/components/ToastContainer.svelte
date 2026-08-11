@@ -1,6 +1,8 @@
 <script>
   import { toast } from '$lib/stores/toast.svelte.js';
-  import { CheckCircle2, AlertCircle, Info } from '@lucide/svelte';
+  import CheckCircle2 from '~icons/lucide/check-circle-2';
+  import AlertCircle from '~icons/lucide/alert-circle';
+  import Info from '~icons/lucide/info';
 </script>
 
 <div class="fixed bottom-5 right-5 z-[10000] flex flex-col gap-2 max-w-sm pointer-events-none">

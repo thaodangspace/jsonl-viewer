@@ -1,6 +1,14 @@
 <script>
+  import { Dialog } from 'bits-ui';
   import { escapeHTML } from '$lib/utils/markdown.js';
-  import { ChevronRight, ChevronDown, FilePenLine, PanelLeft, PanelRight, Columns, X, Maximize2 } from '@lucide/svelte';
+  import ChevronRight from '~icons/lucide/chevron-right';
+  import ChevronDown from '~icons/lucide/chevron-down';
+  import FilePenLine from '~icons/lucide/file-pen-line';
+  import PanelLeft from '~icons/lucide/panel-left';
+  import PanelRight from '~icons/lucide/panel-right';
+  import Columns from '~icons/lucide/columns';
+  import X from '~icons/lucide/x';
+  import Maximize2 from '~icons/lucide/maximize-2';
 
   let { filePath, edits } = $props();
 
@@ -353,7 +361,7 @@
                           </span>
                           <span class="w-4 shrink-0 select-none"> </span>
                           <span class="flex-1 pr-2 whitespace-pre text-ctp-overlay0/20">
-                            
+
                           </span>
                         </div>
                       {/if}
@@ -403,7 +411,7 @@
                           </span>
                           <span class="w-4 shrink-0 select-none"> </span>
                           <span class="flex-1 pr-2 whitespace-pre text-ctp-overlay0/20">
-                            
+
                           </span>
                         </div>
                       {/if}
@@ -500,16 +508,15 @@
   </div>
 </div>
 
-<svelte:window onkeydown={(e) => { if (showModal && e.key === 'Escape') showModal = false; }} />
+<Dialog.Root open={showModal} onOpenChange={(v) => showModal = v}>
+  <Dialog.Portal>
+    <Dialog.Overlay class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-fadeIn" />
+    <Dialog.Content class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <Dialog.Title class="sr-only">Diff Viewer — {filePath}</Dialog.Title>
+      <Dialog.Description class="sr-only">Side-by-side or unified diff view for {filePath}</Dialog.Description>
 
-{#if showModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick={() => showModal = false}></div>
-    
-    <!-- Modal Dialog -->
-    <div class="relative bg-ctp-base border border-ctp-surface0 rounded-2xl shadow-2xl w-[95vw] max-w-[1400px] h-[90vh] flex flex-col overflow-hidden animate-fadeIn text-ctp-text">
-      
+      <div class="relative bg-ctp-base border border-ctp-surface0 rounded-2xl shadow-2xl w-[95vw] max-w-[1400px] h-[90vh] flex flex-col overflow-hidden animate-fadeIn text-ctp-text">
+
       <!-- Modal Header -->
       <div class="flex items-center justify-between px-5 py-3 border-b border-ctp-surface0 bg-ctp-mantle select-none shrink-0">
         <div class="flex items-center gap-2">
@@ -534,15 +541,11 @@
               <span>Unified</span>
             {/if}
           </button>
-          
+
           <!-- Close button -->
-          <button
-            class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer ml-1"
-            onclick={() => showModal = false}
-            title="Close"
-          >
+          <Dialog.Close class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer ml-1" title="Close">
             <X size={18} />
-          </button>
+          </Dialog.Close>
         </div>
       </div>
 
@@ -731,10 +734,10 @@
           </div>
         {/if}
       </div>
-      
-    </div>
-  </div>
-{/if}
+      </div>
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
 
 <style>
   :global(.diff-del-inline) {

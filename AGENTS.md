@@ -84,6 +84,14 @@ frontend/src/lib/
 - **Claude Code**: JSONL with `type: "user"/"assistant"`, tool_use/tool_result in content blocks, `isMeta`/`isSidechain` flags
 - **Codex**: JSONL with `type: "response_item"`, `session_meta`, `turn_context`, environment context messages excluded
 
+## Frontend UI Architecture
+
+- **Component library**: [Bits UI](https://bits-ui.com) (Svelte 5 headless primitives) — Dialogs, DropdownMenus, Collapsibles, Command palettes, Tooltips, and Buttons use Bits UI for accessible, controlled behavior (focus trapping, Escape/outside-click dismissal, ARIA).
+- **Icons**: [unplugin-icons](https://github.com/unplugin/unplugin-icons) with `@iconify-json/lucide` — every Lucide icon is a compile-time `~icons/lucide/<name>` import; `@lucide/svelte` is removed.
+- **UI wrappers**: `frontend/src/lib/components/ui/` contains thin project-owned wrappers (`Button.svelte`, `Tooltip.svelte`, `DialogSurface.svelte`, `Icon.svelte`) that expose full Bits UI behavior while centralizing shared theme classes. Do not build broad wrapper frameworks — keep wrappers thin.
+- **Theme**: Catppuccin-like `ctp-*` design tokens in `app.css` `@theme` block. All Bits UI surface styling (overlay, content, item, trigger) is applied via `app.css` attribute selectors (`[data-bits-*]`). Do not inline-override Bits UI data attributes in individual components.
+- **Manual interaction verification**: Each dialog, dropdown, command palette, collapsible, and tooltip was verified manually against the Phase 2–5 check matrices. New interaction surfaces must use Bits UI primitives and must not reintroduce custom backdrops, manual Escape plumbing, body scroll locks, or coordinate-calculated positioning.
+
 ## Testing
 - Go: `GOCACHE=/tmp/go-cache go test ./...` (requires Go 1.25+)
 - Frontend: `cd frontend && npm run build`

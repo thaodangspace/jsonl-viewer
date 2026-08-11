@@ -1,24 +1,33 @@
 <script>
+  import { Dialog } from 'bits-ui';
   import { untrack } from 'svelte';
   import { closeTmuxModals, tmuxTerminalTarget } from '$lib/stores/tmux.svelte.js';
-  import { ArrowLeft, X, AlertTriangle } from '@lucide/svelte';
+  import ArrowLeft from '~icons/lucide/arrow-left';
+  import X from '~icons/lucide/x';
+  import AlertTriangle from '~icons/lucide/alert-triangle';
   import { Terminal } from 'xterm';
   import { FitAddon } from 'xterm-addon-fit';
   import 'xterm/css/xterm.css';
 
-  let terminalRef;
+  let terminalRef = $state(null);
 
   // Svelte reactive state for UI rendering
   let status = $state('disconnected');
   let sessionName = $state('');
   let windowIndex = $state(null);
 
-  // Non-reactive variables (no need for Svelte $state proxy)
+  // Non-reactive variables
   let terminal = null;
   let fitAddon = null;
   let ws = null;
   let reconnectAttempt = 0;
   let reconnectTimer = null;
+
+  let open = $derived(!!$tmuxTerminalTarget);
+
+  function onOpenChange(v) {
+    if (!v) closeTmuxModals();
+  }
 
   function computeBackoff() {
     const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 16000);
@@ -198,68 +207,75 @@
   });
 </script>
 
-{#if $tmuxTerminalTarget}
-  <div class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick={() => {}}></div>
-    <div class="relative bg-ctp-mantle border border-ctp-surface0 rounded-2xl shadow-2xl w-[90vw] h-[80vh] max-w-[1200px] animate-fadeIn overflow-hidden flex flex-col">
-      <!-- Header -->
-      <div class="px-4 py-3 border-b border-ctp-surface0 flex items-center justify-between bg-ctp-crust">
-        <div class="flex items-center gap-3">
-          <button
-            class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer"
-            title="Back"
-            onclick={closeTmuxModals}
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <span class="text-sm font-semibold text-ctp-text font-mono">
-            {sessionName}{windowIndex !== null && windowIndex > 0 ? ':' + windowIndex : ''}
-          </span>
-          <span class="w-[8px] h-[8px] rounded-full flex-shrink-0 {
-            status === 'connected' ? 'bg-ctp-green' :
-            status === 'connecting' ? 'bg-ctp-yellow animate-pulse' :
-            status === 'ended' ? 'bg-ctp-red' :
-            'bg-ctp-red'
-          }" style="{status === 'connecting' ? 'animation-duration: 1s' : ''}"></span>
-          <span class="text-[11px] text-ctp-overlay0 capitalize">{status}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          {#if status === 'disconnected'}
+<Dialog.Root {open} {onOpenChange}>
+  <Dialog.Portal>
+    <Dialog.Overlay class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 animate-fadeIn" />
+    <Dialog.Content
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      onEscapeKeydown={(e) => { e.preventDefault(); }}
+      onInteractOutside={(e) => { e.preventDefault(); }}
+    >
+      <Dialog.Title class="sr-only">tmux Terminal — {sessionName}{windowIndex !== null && windowIndex > 0 ? ':' + windowIndex : ''}</Dialog.Title>
+      <div class="relative bg-ctp-mantle border border-ctp-surface0 rounded-2xl shadow-2xl w-[90vw] h-[80vh] max-w-[1200px] animate-fadeIn overflow-hidden flex flex-col">
+        <!-- Header -->
+        <div class="px-4 py-3 border-b border-ctp-surface0 flex items-center justify-between bg-ctp-crust">
+          <div class="flex items-center gap-3">
             <button
-              class="px-2 py-1 rounded text-[11px] font-medium bg-ctp-blue/20 text-ctp-blue hover:bg-ctp-blue/30 transition-colors cursor-pointer"
-              onclick={() => { reconnectAttempt = 0; connect(); }}
+              class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer"
+              title="Back"
+              onclick={closeTmuxModals}
             >
-              Reconnect
+              <ArrowLeft size={16} />
             </button>
+            <span class="text-sm font-semibold text-ctp-text font-mono">
+              {sessionName}{windowIndex !== null && windowIndex > 0 ? ':' + windowIndex : ''}
+            </span>
+            <span class="w-[8px] h-[8px] rounded-full flex-shrink-0 {
+              status === 'connected' ? 'bg-ctp-green' :
+              status === 'connecting' ? 'bg-ctp-yellow animate-pulse' :
+              status === 'ended' ? 'bg-ctp-red' :
+              'bg-ctp-red'
+            }" style="{status === 'connecting' ? 'animation-duration: 1s' : ''}"></span>
+            <span class="text-[11px] text-ctp-overlay0 capitalize">{status}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            {#if status === 'disconnected'}
+              <button
+                class="px-2 py-1 rounded text-[11px] font-medium bg-ctp-blue/20 text-ctp-blue hover:bg-ctp-blue/30 transition-colors cursor-pointer"
+                onclick={() => { reconnectAttempt = 0; connect(); }}
+              >
+                Reconnect
+              </button>
+            {/if}
+            <button
+              class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer"
+              onclick={closeTmuxModals}
+            >
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal area -->
+        <div class="flex-1 relative bg-[#1e1e2e]">
+          <div bind:this={terminalRef} class="absolute inset-0"></div>
+
+          {#if status === 'ended'}
+            <div class="absolute inset-0 bg-black/60 flex items-center justify-center">
+              <div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-ctp-mantle border border-ctp-surface0">
+                <AlertTriangle size={16} class="text-ctp-red" />
+                <span class="text-sm text-ctp-text">Session ended</span>
+                <button
+                  class="ml-2 px-3 py-1 rounded text-xs font-medium bg-ctp-surface0 text-ctp-overlay0 hover:text-ctp-text transition-colors cursor-pointer"
+                  onclick={closeTmuxModals}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           {/if}
-          <button
-            class="text-ctp-overlay0 hover:text-ctp-text transition-colors p-1 rounded-md hover:bg-ctp-surface0 flex items-center justify-center cursor-pointer"
-            onclick={closeTmuxModals}
-          >
-            <X class="h-4 w-4" />
-          </button>
         </div>
       </div>
-
-      <!-- Terminal area -->
-      <div class="flex-1 relative bg-[#1e1e2e]">
-        <div bind:this={terminalRef} class="absolute inset-0"></div>
-
-        {#if status === 'ended'}
-          <div class="absolute inset-0 bg-black/60 flex items-center justify-center">
-            <div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-ctp-mantle border border-ctp-surface0">
-              <AlertTriangle size={16} class="text-ctp-red" />
-              <span class="text-sm text-ctp-text">Session ended</span>
-              <button
-                class="ml-2 px-3 py-1 rounded text-xs font-medium bg-ctp-surface0 text-ctp-overlay0 hover:text-ctp-text transition-colors cursor-pointer"
-                onclick={closeTmuxModals}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        {/if}
-      </div>
-    </div>
-  </div>
-{/if}
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>

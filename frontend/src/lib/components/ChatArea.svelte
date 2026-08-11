@@ -1,11 +1,20 @@
 <script>
   import { onMount, tick } from 'svelte';
+  import { DropdownMenu } from 'bits-ui';
   import { messages } from '$lib/stores/messages.svelte.js';
   import { rpcRunning, isStreaming, rpcAutoStarting } from '$lib/stores/rpc.svelte.js';
   import { activeSession, sessions } from '$lib/stores/session.svelte.js';
   import { userScrolledUp, newMessageCount } from '$lib/stores/messages.svelte.js';
   import { sendMessage, abortRPC, ensureRpcRunning } from '$lib/actions/rpc.js';
-  import { MessageSquare, Lightbulb, Wrench, Image, X, Paperclip, ChevronUp, RefreshCw, Check } from '@lucide/svelte';
+  import MessageSquare from '~icons/lucide/message-square';
+  import Lightbulb from '~icons/lucide/lightbulb';
+  import Wrench from '~icons/lucide/wrench';
+  import Image from '~icons/lucide/image';
+  import X from '~icons/lucide/x';
+  import Paperclip from '~icons/lucide/paperclip';
+  import ChevronUp from '~icons/lucide/chevron-up';
+  import RefreshCw from '~icons/lucide/refresh-cw';
+  import Check from '~icons/lucide/check';
 
   import MessageBubble from './MessageBubble.svelte';
   import AssistantBubble from './AssistantBubble.svelte';
@@ -21,6 +30,7 @@
   import { isAtBottom, autoResize, syncHorizontalScroll } from '$lib/utils/scroll.js';
   import { computeDisplayGroups } from '$lib/utils/displayGroups.js';
   import { getRPCCOmmands, uploadImage, getAvailableModels, setModel, cycleModel } from '$lib/api/rpc.js';
+  import { fetchSession } from '$lib/api/sessions.js';
   import { sessionCommands, commandsLoading } from '$lib/stores/commands.svelte.js';
   import { availableModels, setModelsForSession, clearModelsForSession } from '$lib/stores/models.svelte.js';
   import { findSession, readOnlySessionLabel, sessionSupportsRPC } from '$lib/utils/sessionCapabilities.js';
@@ -53,9 +63,6 @@
   let modelsLoading = $state(false);
   let modelsError = $state('');
   let switchingModel = $state(false);
-  let modelBtnRef = $state(null);
-  let modelDropdownEl = $state(null);
-  let modelDropdownTop = $state(0);
   let currentModel = $state('');
 
   const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -184,19 +191,6 @@
     }
   }
 
-  function positionModelDropdown() {
-    if (!modelBtnRef || !modelDropdownEl) return;
-    const rect = modelBtnRef.getBoundingClientRect();
-    // Position above the button
-    modelDropdownTop = rect.top - 6;
-  }
-
-  $effect(() => {
-    if (showModelPicker) {
-      requestAnimationFrame(() => positionModelDropdown());
-    }
-  });
-
   async function selectModel(m) {
     if (switchingModel) return;
     switchingModel = true;
@@ -205,7 +199,7 @@
       const resp = await setModel($activeSession, m.provider, m.id);
       if (resp.success) {
         currentModel = m.name || m.id;
-        closeModelPicker();
+        showModelPicker = false;
         clearModelsForSession($activeSession);
       } else {
         modelsError = resp.error || 'Failed to switch model';
@@ -227,7 +221,7 @@
         if (resp.data?.model) {
           currentModel = resp.data.model.name || resp.data.model.id;
         }
-        closeModelPicker();
+        showModelPicker = false;
         clearModelsForSession($activeSession);
       } else {
         modelsError = resp.error || 'No other model available';
@@ -237,24 +231,6 @@
     } finally {
       switchingModel = false;
     }
-  }
-
-  async function toggleModelPicker(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!activeSessionCanChat) return;
-    if (showModelPicker) {
-      closeModelPicker();
-    } else {
-      const ok = await ensureRpcRunning($activeSession);
-      if (!ok) return;
-      showModelPicker = true;
-      if (models.length === 0) fetchModels();
-    }
-  }
-
-  function closeModelPicker() {
-    showModelPicker = false;
   }
 
   function isCurrentModel(m) {
@@ -318,8 +294,7 @@
     // Update current model from session info
     const unsubSession = activeSession.subscribe(id => {
       if (id) {
-        fetch(`/api/sessions/${id}`)
-          .then(r => r.json())
+        fetchSession(id)
           .then(data => { if (data.model) currentModel = data.model; })
           .catch(() => {});
       } else {
@@ -633,7 +608,7 @@
                 Browsing messages from {activeSessionInfo?.agent || 'claude'} — input is not available.
               {/if}
             {:else}
-              Choose a session from the sidebar to view or continue.
+              Choose a session from the session list to view or continue.
             {/if}
           </p>
           {#if $activeSession && activeSessionCanChat}
@@ -718,14 +693,6 @@
   <!-- Input Area (hidden for read-only sessions: Claude / Codex) -->
   {#if activeSessionCanChat}
   <div class="border-t border-ctp-crust bg-ctp-mantle relative w-full">
-    <!-- Overlay to close model picker on click -->
-    {#if showModelPicker}
-      <div
-        class="absolute inset-0 z-[10]"
-        onclick={closeModelPicker}
-      ></div>
-    {/if}
-
     <!-- Drag-over overlay -->
     {#if isDragOver}
       <div class="absolute inset-0 bg-ctp-blue/5 border-2 border-dashed border-ctp-blue rounded-lg flex items-center justify-center pointer-events-none z-10">
@@ -832,28 +799,115 @@
 
       <!-- Model Switcher + Status Bar -->
       <div class="flex items-center justify-between mt-2">
-        <!-- Model Picker Button -->
-        <button
-          bind:this={modelBtnRef}
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer
-                 bg-ctp-blue/8 text-ctp-blue hover:bg-ctp-blue/15"
-          class:opacity-40={!activeSessionCanChat}
-          class:cursor-not-allowed={!activeSessionCanChat}
-          disabled={!activeSessionCanChat}
-          title={activeSessionCanChat ? 'Click to change model' : 'Model switching requires a pi RPC session'}
-          onclick={toggleModelPicker}
-        >
-          {#if switchingModel}
-            <span class="w-3 h-3 border border-ctp-blue border-t-transparent rounded-full animate-spin"></span>
-          {:else}
-            <span class="font-semibold uppercase text-[10px] w-4 h-4 rounded flex items-center justify-center bg-ctp-blue/12">
-              {models.find(m => isCurrentModel(m))?.provider?.[0]?.toUpperCase() || '?'}
-            </span>
-            <span class="truncate max-w-[180px]">{currentModel || 'Select model'}</span>
-            <ChevronUp class="w-3 h-3 shrink-0" />
-          {/if}
-        </button>
- 
+        <!-- Model Picker Button (Bits UI DropdownMenu) -->
+        <DropdownMenu.Root open={showModelPicker} onOpenChange={async (v) => {
+          if (!v) { showModelPicker = false; return; }
+          if (!activeSessionCanChat) return;
+          const ok = await ensureRpcRunning($activeSession);
+          if (!ok) return;
+          showModelPicker = true;
+          if (models.length === 0) fetchModels();
+        }}>
+          <DropdownMenu.Trigger
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer bg-ctp-blue/8 text-ctp-blue hover:bg-ctp-blue/15 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={!activeSessionCanChat}
+            title={activeSessionCanChat ? 'Click to change model' : 'Model switching requires a pi RPC session'}
+          >
+            {#if switchingModel}
+              <span class="w-3 h-3 border border-ctp-blue border-t-transparent rounded-full animate-spin"></span>
+            {:else}
+              <span class="font-semibold uppercase text-[10px] w-4 h-4 rounded flex items-center justify-center bg-ctp-blue/12">
+                {models.find(m => isCurrentModel(m))?.provider?.[0]?.toUpperCase() || '?'}
+              </span>
+              <span class="truncate max-w-[180px]">{currentModel || 'Select model'}</span>
+              <ChevronUp class="w-3 h-3 shrink-0" />
+            {/if}
+          </DropdownMenu.Trigger>
+
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              class="w-80 bg-ctp-base border border-ctp-crust rounded-xl shadow-2xl overflow-hidden animate-fadeIn z-30"
+              side="top"
+              align="start"
+              sideOffset={8}
+            >
+              <!-- Header -->
+              <div class="px-3 py-2 border-b border-ctp-crust flex items-center justify-between">
+                <span class="text-[11px] font-semibold text-ctp-overlay0">Switch Model</span>
+                {#if models.length > 1}
+                  <DropdownMenu.Item
+                    class="text-[11px] text-ctp-blue hover:text-ctp-blue/80 cursor-pointer px-2 py-0.5 rounded hover:bg-ctp-blue/10 transition-colors inline-flex items-center gap-1"
+                    disabled={switchingModel}
+                    onclick={(e) => { e.stopPropagation(); handleCycleModel(); }}
+                    title="Cycle to next model"
+                  >
+                    {#if switchingModel}
+                      <span>...</span>
+                    {:else}
+                      <RefreshCw size={11} />
+                      <span>Cycle</span>
+                    {/if}
+                  </DropdownMenu.Item>
+                {/if}
+              </div>
+
+              {#if $rpcAutoStarting || modelsLoading}
+                <div class="px-4 py-6 text-center text-[11px] text-ctp-overlay0">
+                  <div class="w-4 h-4 border-2 border-ctp-blue border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                  {$rpcAutoStarting ? 'Connecting...' : 'Loading models...'}
+                </div>
+              {:else if modelsError}
+                <div class="px-4 py-3 text-[11px] text-ctp-red bg-ctp-red/8">
+                  {escapeHTML(modelsError)}
+                </div>
+              {:else}
+                <DropdownMenu.RadioGroup value={currentModel}>
+                  <div class="max-h-64 overflow-y-auto py-1">
+                    {#each models as m}
+                      <DropdownMenu.RadioItem
+                        class="w-full px-3 py-2 text-left flex items-center gap-2.5 transition-colors hover:bg-ctp-crust/70 cursor-pointer data-[highlighted]:bg-ctp-crust/70"
+                        disabled={switchingModel}
+                        value={m.name || m.id}
+                        onclick={() => selectModel(m)}
+                      >
+                        <span class="w-4 shrink-0 text-center text-xs flex items-center justify-center">
+                          {#if isCurrentModel(m)}
+                            <Check class="w-3 h-3 text-ctp-green" />
+                          {:else}
+                            <span class="text-ctp-overlay0 opacity-30">○</span>
+                          {/if}
+                        </span>
+
+                        <span class="text-xs font-bold shrink-0 w-5 h-5 rounded flex items-center justify-center"
+                              style="background:color-mix(in srgb, #135ce0 10%, transparent); color:#135ce0"
+                              title={m.provider}>
+                          {providerIcon(m.provider)}
+                        </span>
+
+                        <div class="flex-1 min-w-0">
+                          <div class="text-xs font-medium text-ctp-text truncate">
+                            {escapeHTML(m.name || m.id)}
+                          </div>
+                          {#if m.contextWindow}
+                            <div class="text-[10px] text-ctp-overlay0 truncate">{Math.round(m.contextWindow / 1000)}k ctx{#if m.reasoning} · thinking{/if}</div>
+                          {/if}
+                        </div>
+
+                        {#if m.contextWindow}
+                          <span class="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                                style="background:color-mix(in srgb, #1b7c83 10%, transparent); color:#1b7c83">
+                            {Math.round(m.contextWindow / 1000)}k
+                          </span>
+                        {/if}
+                      </DropdownMenu.RadioItem>
+                    {/each}
+                  </div>
+                </DropdownMenu.RadioGroup>
+              {/if}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+
         <!-- Status info -->
         <div class="flex items-center gap-2">
           <div class="flex items-center gap-1.5 text-[10px] text-ctp-overlay1">
@@ -876,86 +930,6 @@
         </div>
       </div>
     </div>
- 
-    <!-- Model Dropdown Panel - positioned above the model button -->
-    {#if showModelPicker && !activeSessionIsReadOnly}
-      <div
-        bind:this={modelDropdownEl}
-        class="absolute z-[30] left-4 bottom-full mb-2 w-80 bg-ctp-base border border-ctp-crust rounded-xl shadow-2xl overflow-hidden animate-fadeIn"
-        style="bottom: calc(100% + 8px);"
-      >
-        <!-- Header -->
-        <div class="px-3 py-2 border-b border-ctp-crust flex items-center justify-between">
-          <span class="text-[11px] font-semibold text-ctp-overlay0">Switch Model</span>
-          {#if models.length > 1}
-            <button
-              class="text-[11px] text-ctp-blue hover:text-ctp-blue/80 cursor-pointer px-2 py-0.5 rounded hover:bg-ctp-blue/10 transition-colors inline-flex items-center gap-1"
-              disabled={switchingModel}
-              onclick={(e) => { e.stopPropagation(); handleCycleModel(); }}
-              title="Cycle to next model"
-            >
-              {#if switchingModel}
-                <span>...</span>
-              {:else}
-                <RefreshCw size={11} />
-                <span>Cycle</span>
-              {/if}
-            </button>
-          {/if}
-        </div>
- 
-        {#if $rpcAutoStarting || modelsLoading}
-          <div class="px-4 py-6 text-center text-[11px] text-ctp-overlay0">
-            <div class="w-4 h-4 border-2 border-ctp-blue border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-            {$rpcAutoStarting ? 'Connecting...' : 'Loading models...'}
-          </div>
-        {:else if modelsError}
-          <div class="px-4 py-3 text-[11px] text-ctp-red bg-ctp-red/8">
-            {escapeHTML(modelsError)}
-          </div>
-        {:else}
-          <div class="max-h-64 overflow-y-auto py-1">
-            {#each models as m}
-              <button
-                class="w-full px-3 py-2 text-left flex items-center gap-2.5 transition-colors hover:bg-ctp-crust/70 cursor-pointer {isCurrentModel(m) ? 'bg-ctp-crust/40' : ''}"
-                disabled={switchingModel || isCurrentModel(m)}
-                onclick={() => selectModel(m)}
-              >
-                <span class="w-4 shrink-0 text-center text-xs flex items-center justify-center">
-                  {#if isCurrentModel(m)}
-                    <Check class="w-3 h-3 text-ctp-green" />
-                  {:else}
-                    <span class="text-ctp-overlay0 opacity-30">○</span>
-                  {/if}
-                </span>
-
-                <span class="text-xs font-bold shrink-0 w-5 h-5 rounded flex items-center justify-center"
-                      style="background:color-mix(in srgb, #135ce0 10%, transparent); color:#135ce0"
-                      title={m.provider}>
-                  {providerIcon(m.provider)}
-                </span>
-
-                <div class="flex-1 min-w-0">
-                  <div class="text-xs font-medium text-ctp-text truncate">
-                    {escapeHTML(m.name || m.id)}
-                  </div>
-                  {#if m.contextWindow}
-                    <div class="text-[10px] text-ctp-overlay0 truncate">{Math.round(m.contextWindow / 1000)}k ctx{#if m.reasoning} · thinking{/if}</div>
-                  {/if}
-                </div>
-
-                {#if m.contextWindow}
-                  <span class="text-[9px] px-1.5 py-0.5 rounded shrink-0"
-                        style="background:color-mix(in srgb, #1b7c83 10%, transparent); color:#1b7c83">
-                    {Math.round(m.contextWindow / 1000)}k
-                  </span>
-                {/if}
-              </button>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/if}
   </div>
   {/if}
 </div>

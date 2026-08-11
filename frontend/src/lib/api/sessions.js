@@ -6,8 +6,12 @@ export async function fetchSessions(sortBy = 'last_updated', groupBy = false) {
 }
 
 export async function fetchSession(id) {
-  const res = await fetch(`/api/sessions/${id}`);
-  if (!res.ok) throw new Error('Session not found');
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    const error = new Error(res.status === 404 ? 'Session not found' : 'Session unavailable');
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
@@ -29,7 +33,7 @@ export async function fetchUnreadIds() {
 }
 
 export async function markSessionRead(id, lineCount = 0) {
-  const res = await fetch(`/api/sessions/${id}/mark-read`, {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/mark-read`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ line_count: lineCount }),

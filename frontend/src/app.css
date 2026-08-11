@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+html, body, #app {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+@supports not (height: 100dvh) {
+  .app-shell { min-height: 100vh; height: 100vh; }
+}
+
 @theme {
   /* Juejin / Drake-Juejin theme */
   --color-ctp-base: #ffffff;
@@ -118,4 +133,79 @@
 .typing-dots span { animation: pulse 1.4s ease-in-out infinite; }
 .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
 .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Bits UI interaction primitives */
+[data-bits-button],
+[data-bits-dialog-trigger],
+[data-bits-dialog-close],
+[data-bits-dropdown-menu-trigger],
+[data-bits-dropdown-menu-item],
+[data-bits-select-trigger],
+[data-bits-select-item],
+[data-bits-collapsible-trigger],
+[data-bits-command-item],
+[data-bits-tooltip-trigger] {
+  cursor: pointer;
+}
+
+[data-bits-button]:focus-visible,
+[data-bits-dialog-trigger]:focus-visible,
+[data-bits-dialog-close]:focus-visible,
+[data-bits-dropdown-menu-trigger]:focus-visible,
+[data-bits-dropdown-menu-item]:focus-visible,
+[data-bits-select-trigger]:focus-visible,
+[data-bits-select-item]:focus-visible,
+[data-bits-collapsible-trigger]:focus-visible,
+[data-bits-command-item]:focus-visible,
+[data-bits-tooltip-trigger]:focus-visible {
+  outline: 2px solid var(--color-ctp-blue);
+  outline-offset: 2px;
+}
+
+[data-bits-button][data-disabled],
+[data-bits-dropdown-menu-item][data-disabled],
+[data-bits-select-item][data-disabled],
+[data-bits-command-item][data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Bits UI overlay/dialog surfaces */
+[data-bits-dialog-overlay] {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+}
+
+[data-bits-dialog-content] {
+  position: fixed;
+  z-index: 50;
+  animation: fadeIn 0.2s ease;
+}
+
+/* Bits UI dropdown/select/command popover styling */
+[data-bits-dropdown-menu-content],
+[data-bits-select-content],
+[data-bits-command-list] {
+  background: var(--color-ctp-base);
+  border: 1px solid var(--color-ctp-crust);
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: fadeIn 0.2s ease;
+  z-index: 30;
+}
+
+/* Bits tooltip styling */
+[data-bits-tooltip-content] {
+  background: var(--color-ctp-text);
+  color: var(--color-ctp-base);
+  font-size: 11px;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  z-index: 60;
+  animation: fadeIn 0.15s ease;
+}
 
