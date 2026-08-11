@@ -1,10 +1,16 @@
 <script>
+  import { Collapsible } from 'bits-ui';
   import { escapeHTML, highlightCode } from '$lib/utils/markdown.js';
   import { detectLanguageFromPath } from '$lib/utils/language.js';
   import { unescapeJsonString } from '$lib/utils/json.js';
   import DiffView from './DiffView.svelte';
   import { applyCollapseDefault, toggleCollapseState } from '$lib/stores/collapseState.js';
-  import { ChevronRight, ChevronDown, FileText, BookOpen, Terminal, Wrench } from '@lucide/svelte';
+  import ChevronRight from '~icons/lucide/chevron-right';
+  import ChevronDown from '~icons/lucide/chevron-down';
+  import FileText from '~icons/lucide/file-text';
+  import BookOpen from '~icons/lucide/book-open';
+  import Terminal from '~icons/lucide/terminal';
+  import Wrench from '~icons/lucide/wrench';
 
   let { tc, stateKey } = $props();
   let collapsed = $state(true);
@@ -138,6 +144,12 @@
 
   let resultIsError = $derived(tc.resultIsError || false);
 
+  let open = $derived(!collapsed);
+
+  function onOpenChange(v) {
+    collapsed = toggleCollapseState(collapseKey, !v);
+  }
+
   function toggle() {
     collapsed = toggleCollapseState(collapseKey, collapsed);
   }
@@ -146,8 +158,8 @@
 {#if normalizedEditInfo}
   <DiffView filePath={normalizedEditInfo.filePath} edits={normalizedEditInfo.edits} />
 {:else if isWriteTool}
-  <div class="rounded-lg overflow-hidden border border-ctp-surface0 mb-2" style="background:color-mix(in srgb, #135ce0 8%, #f6f6f6)">
-    <button class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer" onclick={toggle}>
+  <Collapsible.Root {open} {onOpenChange} class="rounded-lg overflow-hidden border border-ctp-surface0 mb-2" style="background:color-mix(in srgb, #135ce0 8%, #f6f6f6)">
+    <Collapsible.Trigger class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer">
       <span class="flex items-center">
         {#if collapsed}
           <ChevronRight size={12} />
@@ -158,23 +170,22 @@
       <FileText size={14} class="text-ctp-blue" />
       <span class="font-semibold" style="color:#135ce0">write</span>
       <span class="text-ctp-overlay0 text-[10px] ml-auto truncate max-w-[300px]" title={writePath}>{writePath.split('/').slice(-2).join('/')}</span>
-    </button>
-    <div class="border-t border-ctp-surface0" class:hidden={collapsed}>
+    </Collapsible.Trigger>
+    <Collapsible.Content class="border-t border-ctp-surface0">
       <div class="text-[11px] font-mono" style="background:color-mix(in srgb, #ffffff 50%, #f6f6f6);">
         <pre class="p-3 overflow-x-auto max-h-[400px] overflow-y-auto whitespace-pre-wrap break-words">
           {@html writeContentHTML}
         </pre>
       </div>
-    </div>
-  </div>
+    </Collapsible.Content>
+  </Collapsible.Root>
 {:else if tc.name?.toLowerCase() === 'askuserquestion' && parsedArgs && Array.isArray(parsedArgs.questions)}
-  <div class="rounded-xl overflow-hidden border mb-2 shadow-sm transition-all duration-300 w-full text-left"
+  <Collapsible.Root {open} {onOpenChange} class="rounded-xl overflow-hidden border mb-2 shadow-sm transition-all duration-300 w-full text-left"
        style="background: var(--color-ctp-base); border-color: {hasResult ? 'color-mix(in srgb, var(--color-ctp-green) 35%, var(--color-ctp-crust))' : 'color-mix(in srgb, var(--color-ctp-blue) 35%, var(--color-ctp-crust))'};">
     
     <!-- Header -->
-    <button class="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer transition-colors duration-150 text-left"
-            style="background: {hasResult ? 'color-mix(in srgb, var(--color-ctp-green) 8%, var(--color-ctp-base))' : 'color-mix(in srgb, var(--color-ctp-blue) 8%, var(--color-ctp-base))'};"
-            onclick={toggle}>
+    <Collapsible.Trigger class="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer transition-colors duration-150 text-left"
+            style="background: {hasResult ? 'color-mix(in srgb, var(--color-ctp-green) 8%, var(--color-ctp-base))' : 'color-mix(in srgb, var(--color-ctp-blue) 8%, var(--color-ctp-base))'};">
       <span class="flex items-center text-ctp-overlay0 shrink-0">
         {#if collapsed}
           <ChevronRight size={12} />
@@ -214,10 +225,10 @@
           {/if}
         </span>
       {/if}
-    </button>
+    </Collapsible.Trigger>
 
     <!-- Content -->
-    <div class="border-t border-ctp-crust" class:hidden={collapsed}>
+    <Collapsible.Content class="border-t border-ctp-crust">
       <div class="p-4 flex flex-col gap-5 bg-ctp-base">
         {#each parsedArgs.questions as q, qIdx}
           <div class="flex flex-col gap-2">
@@ -283,12 +294,12 @@
           </div>
         </div>
       {/if}
-    </div>
-  </div>
+    </Collapsible.Content>
+  </Collapsible.Root>
 {:else}
-  <div class="rounded-lg overflow-hidden border border-ctp-surface0 mb-2"
+  <Collapsible.Root {open} {onOpenChange} class="rounded-lg overflow-hidden border border-ctp-surface0 mb-2"
        style="background: {hasResult && resultIsError ? 'color-mix(in srgb, #e95f59 8%, #ffffff)' : 'color-mix(in srgb, #135ce0 6%, #ffffff)'}">
-    <button class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer text-left" onclick={toggle}>
+    <Collapsible.Trigger class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer text-left">
       <span class="flex items-center">
         {#if collapsed}
           <ChevronRight size={12} />
@@ -309,8 +320,8 @@
       {:else}
         <span class="text-ctp-overlay0 text-[10px] ml-auto">{escapeHTML(argsStr.substring(0, 50))}…</span>
       {/if}
-    </button>
-    <div class="border-t border-ctp-surface0" class:hidden={collapsed}>
+    </Collapsible.Trigger>
+    <Collapsible.Content class="border-t border-ctp-surface0">
       <!-- Arguments section -->
       {#if tc.name !== 'read'}
         <div class="p-3 text-xs overflow-x-auto" style="background:color-mix(in srgb, #ffffff 50%, #f6f6f6);">
@@ -343,6 +354,6 @@
           {/if}
         </div>
       {/if}
-    </div>
-  </div>
+    </Collapsible.Content>
+  </Collapsible.Root>
 {/if}

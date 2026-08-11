@@ -10,9 +10,38 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"agent-reader/internal/history"
 )
+
+func TestSPAHandlerServesClientRoutesAndStaticAssets(t *testing.T) {
+	fileSystem := fstest.MapFS{
+		"index.html":  &fstest.MapFile{Data: []byte("<html>app shell</html>")},
+		"assets/app.js": &fstest.MapFile{Data: []byte("console.log('asset')")},
+	}
+	h := spaHandler(fileSystem)
+
+	routeReq := httptest.NewRequest(http.MethodGet, "/sessions/example", nil)
+	routeRec := httptest.NewRecorder()
+	h.ServeHTTP(routeRec, routeReq)
+	if routeRec.Code != http.StatusOK {
+		t.Fatalf("session route status = %d, want %d", routeRec.Code, http.StatusOK)
+	}
+	if got := routeRec.Body.String(); got != "<html>app shell</html>" {
+		t.Fatalf("session route body = %q, want SPA shell", got)
+	}
+
+	assetReq := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
+	assetRec := httptest.NewRecorder()
+	h.ServeHTTP(assetRec, assetReq)
+	if assetRec.Code != http.StatusOK {
+		t.Fatalf("asset status = %d, want %d", assetRec.Code, http.StatusOK)
+	}
+	if got := assetRec.Body.String(); got != "console.log('asset')" {
+		t.Fatalf("asset body = %q, want asset contents", got)
+	}
+}
 
 func TestDesktopCORSAllowsTauriOriginForAPI(t *testing.T) {
 	s := &Server{sessionsDir: t.TempDir(), desktop: true}

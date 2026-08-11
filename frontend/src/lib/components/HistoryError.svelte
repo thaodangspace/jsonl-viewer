@@ -1,5 +1,6 @@
 <script>
-  import { RefreshCw } from '@lucide/svelte';
+  import RefreshCw from '~icons/lucide/refresh-cw';
+  import Button from '$lib/components/ui/Button.svelte';
 
   let { error = null, onRetry = () => {} } = $props();
 
@@ -11,11 +12,11 @@
     <span class="text-ctp-red">⚠</span>
     <span>{message}</span>
   </div>
-  <button
-    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs text-ctp-blue bg-ctp-blue/10 hover:bg-ctp-blue/15 transition-colors cursor-pointer"
+  <Button
+    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs text-ctp-blue bg-ctp-blue/10 hover:bg-ctp-blue/15 transition-colors"
     onclick={onRetry}
   >
     <RefreshCw size={12} />
     <span>Retry</span>
-  </button>
+  </Button>
 </div>

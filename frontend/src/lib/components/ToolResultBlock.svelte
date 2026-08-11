@@ -1,4 +1,5 @@
 <script>
+  import { Collapsible } from 'bits-ui';
   import { escapeHTML, highlightCode } from '$lib/utils/markdown.js';
   import { detectLanguageFromPath } from '$lib/utils/language.js';
   import { unescapeJsonString } from '$lib/utils/json.js';
@@ -8,6 +9,7 @@
   let collapsed = $state(true);
   let collapseKey = $derived(stateKey || `tool-result:${msg.toolCallId || msg.id || msg.toolName || 'unknown'}`);
   let defaultCollapsed = $derived(msg.toolName !== 'bash');
+  let open = $derived(!collapsed);
 
   $effect(() => {
     collapsed = applyCollapseDefault(collapseKey, defaultCollapsed);
@@ -48,8 +50,8 @@
     return answers;
   }
 
-  function toggle() {
-    collapsed = toggleCollapseState(collapseKey, collapsed);
+  function onOpenChange(v) {
+    collapsed = toggleCollapseState(collapseKey, !v);
   }
 </script>
 
@@ -59,22 +61,25 @@
       class="w-full max-w-[85%] rounded-xl overflow-hidden border border-ctp-surface0"
       style="border-color: {isError ? '#e95f59' : '#e5e5e5'}"
     >
-      {@render toolContent()}
+      <Collapsible.Root {open} {onOpenChange}>
+        {@render toolContent()}
+      </Collapsible.Root>
     </div>
   </div>
 {:else}
   <div class="rounded-xl overflow-hidden" style="border-color: {isError ? '#e95f59' : '#e5e5e5'}">
-    {@render toolContent()}
+    <Collapsible.Root {open} {onOpenChange}>
+      {@render toolContent()}
+    </Collapsible.Root>
   </div>
 {/if}
 
 {#snippet toolContent()}
-  <button
+  <Collapsible.Trigger
     class="w-full flex items-center gap-2 px-3 py-2 text-xs cursor-pointer text-left"
     style="background: {isError
       ? 'color-mix(in srgb, #e95f59 12%, #ffffff)'
       : 'color-mix(in srgb, #dbab09 12%, #ffffff)'}"
-    onclick={toggle}
   >
     <span
       class="transition-transform duration-200 text-[10px]"
@@ -87,8 +92,8 @@
     {:else}
       <span class="text-ctp-overlay0 text-[10px] ml-auto">Result</span>
     {/if}
-  </button>
-  <div class="border-t border-ctp-surface0" class:hidden={collapsed}>
+  </Collapsible.Trigger>
+  <Collapsible.Content class="border-t border-ctp-surface0">
     {#if msg.toolName?.toLowerCase() === 'askuserquestion'}
       {@const parsed = parseAnswers(content)}
       <div class="p-4 bg-ctp-base text-ctp-text text-left">
@@ -129,5 +134,5 @@
         {/if}
       </div>
     {/if}
-  </div>
+  </Collapsible.Content>
 {/snippet}

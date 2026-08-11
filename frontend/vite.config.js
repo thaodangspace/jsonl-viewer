@@ -1,9 +1,10 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
+import Icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [svelte(), tailwindcss()],
+  plugins: [svelte(), tailwindcss(), Icons({ compiler: 'svelte' })],
   build: {
     outDir: '../internal/server/static/dist',
     emptyOutDir: true,

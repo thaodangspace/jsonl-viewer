@@ -1,13 +1,21 @@
 <script>
+  import { Command } from 'bits-ui';
   import { searchFS, debouncedSearch } from '$lib/api/fs.js';
-  import { Folder, CornerUpLeft, FileCode, Settings, FileText, FileImage, Terminal, File } from '@lucide/svelte';
+  import Folder from '~icons/lucide/folder';
+  import CornerUpLeft from '~icons/lucide/corner-up-left';
+  import FileCode from '~icons/lucide/file-code';
+  import Settings from '~icons/lucide/settings';
+  import FileText from '~icons/lucide/file-text';
+  import FileImage from '~icons/lucide/file-image';
+  import Terminal from '~icons/lucide/terminal';
+  import File from '~icons/lucide/file';
 
   let { sessionId, input, onFileSelect, onMentionClose } = $props();
 
   let entries = $state([]);
   let loading = $state(false);
-  let selectedIndex = $state(0);
   let searchQuery = $state('');
+  let selectedValue = $state('');
 
   function escapeHTML(str) {
     if (typeof str !== 'string') str = str == null ? '' : String(str);
@@ -39,7 +47,10 @@
     if (scriptExts.includes(ext)) return Terminal;
     return File;
   }
- 
+
+  // Stable value keys for each entry
+  let entryKeys = $derived(entries.map((e, i) => `${e.path || e.name}-${i}`));
+
   $effect(() => {
     const _ = input;
     const query = getMentionQuery();
@@ -58,52 +69,65 @@
         entries = [];
       }
       loading = false;
-      selectedIndex = 0;
+      if (entries.length > 0) {
+        selectedValue = `${entries[0].path || entries[0].name}-0`;
+      }
     });
   });
- 
+
   let show = $derived(entries.length > 0 || loading);
- 
+
   function selectEntry(entry) {
     onFileSelect(entry);
   }
- 
-  function navigateUp() {
-    if (entries.length === 0) return;
-    selectedIndex = (selectedIndex - 1 + entries.length) % entries.length;
-  }
- 
-  function navigateDown() {
-    if (entries.length === 0) return;
-    selectedIndex = (selectedIndex + 1) % entries.length;
-  }
- 
+
   function handleKeydown(e) {
     if (!show) return false;
+
+    const idx = entryKeys.indexOf(selectedValue);
+
     if (e.key === 'ArrowDown') {
-      e.preventDefault(); e.stopPropagation(); navigateDown(); return true;
+      e.preventDefault(); e.stopPropagation();
+      const nextIdx = (idx + 1) % entryKeys.length;
+      selectedValue = entryKeys[nextIdx];
+      return true;
     }
     if (e.key === 'ArrowUp') {
-      e.preventDefault(); e.stopPropagation(); navigateUp(); return true;
+      e.preventDefault(); e.stopPropagation();
+      const nextIdx = (idx - 1 + entryKeys.length) % entryKeys.length;
+      selectedValue = entryKeys[nextIdx];
+      return true;
     }
     if (e.key === 'Enter' && !e.shiftKey && entries.length > 0) {
-      e.preventDefault(); e.stopPropagation(); selectEntry(entries[selectedIndex]); return true;
+      e.preventDefault(); e.stopPropagation();
+      const entry = entries[Math.max(0, idx)];
+      if (entry) selectEntry(entry);
+      return true;
     }
     if (e.key === 'Escape') {
-      e.preventDefault(); e.stopPropagation(); onMentionClose(); return true;
+      e.preventDefault(); e.stopPropagation();
+      onMentionClose();
+      return true;
     }
     if (e.key === 'Tab' && entries.length > 0) {
-      e.preventDefault(); e.stopPropagation(); selectEntry(entries[selectedIndex]); return true;
+      e.preventDefault(); e.stopPropagation();
+      const entry = entries[Math.max(0, idx)];
+      if (entry) selectEntry(entry);
+      return true;
     }
     return false;
   }
- 
+
   export { handleKeydown, show };
 </script>
- 
+
 {#if show}
-  <div
-    class="file-mention-palette absolute bottom-full left-0 right-0 mb-1 bg-ctp-mantle border border-ctp-surface0 rounded-lg shadow-lg overflow-hidden z-50 max-h-60 overflow-y-auto"
+  <Command.Root
+    value={selectedValue}
+    onValueChange={(v) => { if (v) selectedValue = v; }}
+    shouldFilter={false}
+    loop
+    class="file-mention-palette absolute bottom-full left-0 right-0 mb-1 bg-ctp-mantle border border-ctp-surface0 rounded-lg shadow-lg overflow-hidden z-50"
   >
     {#if loading}
       <div class="px-3 py-3 text-center text-[11px] text-ctp-overlay0">
@@ -116,31 +140,34 @@
       </div>
     {:else}
       <div class="px-3 py-1.5 border-b border-ctp-surface0/50 text-[10px] text-ctp-overlay0 flex items-center justify-between">
-        <span>Files —  navigate,  select, tab autocomplete</span>
+        <span>Files — navigate, select, tab autocomplete</span>
         <span>{entries.length} found</span>
       </div>
-      {#each entries as entry, i}
-        {@const Icon = entryIcon(entry)}
-        <button
-          class="w-full px-3 py-1.5 text-left flex items-center gap-2 transition-colors hover:bg-ctp-surface0/70 cursor-pointer"
-          class:bg-ctp-surface0={i === selectedIndex}
-          onclick={() => selectEntry(entry)}
-          onmouseenter={() => selectedIndex = i}
-        >
-          <span class="text-xs shrink-0 flex items-center justify-center text-ctp-overlay1">
-            <Icon size={14} />
-          </span>
-          <div class="flex-1 min-w-0">
-            <div class="text-xs font-mono text-ctp-text truncate">{escapeHTML(entry.name)}</div>
-            <div class="text-[9px] text-ctp-overlay1 truncate">{escapeHTML(entry.path)}</div>
-          </div>
-          {#if entry.is_dir}
-            <span class="text-[9px] text-ctp-overlay1 shrink-0">dir</span>
-          {:else if entry.size}
-            <span class="text-[9px] text-ctp-overlay1 shrink-0">{Math.round(entry.size / 1024)}KB</span>
-          {/if}
-        </button>
-      {/each}
+      <Command.List class="max-h-60 overflow-y-auto">
+        <Command.Viewport>
+          {#each entries as entry, i}
+            {@const Icon = entryIcon(entry)}
+            <Command.Item
+              value={entryKeys[i]}
+              class="w-full px-3 py-1.5 text-left flex items-center gap-2 transition-colors cursor-pointer data-[selected]:bg-ctp-surface0/70"
+              onclick={() => selectEntry(entry)}
+            >
+              <span class="text-xs shrink-0 flex items-center justify-center text-ctp-overlay1">
+                <Icon size={14} />
+              </span>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-mono text-ctp-text truncate">{escapeHTML(entry.name)}</div>
+                <div class="text-[9px] text-ctp-overlay1 truncate">{escapeHTML(entry.path)}</div>
+              </div>
+              {#if entry.is_dir}
+                <span class="text-[9px] text-ctp-overlay1 shrink-0">dir</span>
+              {:else if entry.size}
+                <span class="text-[9px] text-ctp-overlay1 shrink-0">{Math.round(entry.size / 1024)}KB</span>
+              {/if}
+            </Command.Item>
+          {/each}
+        </Command.Viewport>
+      </Command.List>
     {/if}
-  </div>
+  </Command.Root>
 {/if}

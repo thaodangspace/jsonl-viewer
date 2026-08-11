@@ -46,7 +46,7 @@ export function beginInitialHistoryLoad(sessionID) {
 
 
 /**
- * Load the latest history page for a session.  Called from selectSession().
+ * Load the latest history page for a session. Called from loadSession().
  *
  * 1. Increments load generation (invalidates stale requests).
  * 2. Subscribes to session via WS (separate step in session.js).
@@ -56,7 +56,7 @@ export function beginInitialHistoryLoad(sessionID) {
  *
  * @param {string} sessionID
  * @param {Function} setMessages - (messages) => void to update the messages store
- * @returns {Promise<void>}
+ * @returns {Promise<{ok: boolean, stale?: boolean, error?: Error}>}
  */
 export async function loadInitialHistory(sessionID, setMessages) {
   // Cancel any in-flight request
@@ -87,7 +87,7 @@ export async function loadInitialHistory(sessionID, setMessages) {
     });
 
     // Stale check: generation changed while fetching
-    if (_loadGeneration !== gen) return;
+    if (_loadGeneration !== gen) return { ok: false, stale: true };
 
     // Dedup and transform
     const deduped = dedupBatch(sessionID, page.events || [], _seenKeys);
@@ -108,18 +108,21 @@ export async function loadInitialHistory(sessionID, setMessages) {
       }
     }
   } catch (err) {
-    if (err.name === 'AbortError') return;
-    if (_loadGeneration !== gen) return;
+    if (err.name === 'AbortError') return { ok: false, stale: true };
+    if (_loadGeneration !== gen) return { ok: false, stale: true };
 
     _historyError = { message: err.message || 'Failed to load history' };
 
     // On error, drain the buffer and let live events flow normally
     drainLiveBuffer();
+    return { ok: false, error: err };
   } finally {
     if (_loadGeneration === gen) {
       _initialLoading = false;
     }
   }
+
+  return { ok: true };
 }
 
 /**

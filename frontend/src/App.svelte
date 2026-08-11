@@ -1,14 +1,16 @@
 <script>
   import { onMount } from 'svelte';
+  import { Tooltip } from 'bits-ui';
   import { connectWS } from '$lib/api/websocket.js';
   import { fetchSessions, fetchUnreadIds } from '$lib/api/sessions.js';
   import { getRPCStatus } from '$lib/api/rpc.js';
-  import { activeSession, sessions, unreadSessionIds } from '$lib/stores/session.svelte.js';
-  import { userScrolledUp, newMessageCount } from '$lib/stores/messages.svelte.js';
+  import { sessions, activeSession, unreadSessionIds } from '$lib/stores/session.svelte.js';
   import { setRpcRunning } from '$lib/stores/rpc.svelte.js';
-  import { sidebarOpen, newSessionModalOpen, sortBy, groupByProject } from '$lib/stores/ui.svelte.js';
-  import { ws } from '$lib/stores/ws.svelte.js';
-  import Sidebar from '$lib/components/Sidebar.svelte';
+  import { newSessionModalOpen, sortBy, groupByProject } from '$lib/stores/ui.svelte.js';
+  import { loadSession, clearCurrentSession } from '$lib/actions/session.js';
+  import { getBrowserRouter, RouteName } from '$lib/routing/router.js';
+  import SessionLanding from '$lib/components/SessionLanding.svelte';
+  import RouteError from '$lib/components/RouteError.svelte';
   import HeaderBar from '$lib/components/HeaderBar.svelte';
   import ChatArea from '$lib/components/ChatArea.svelte';
   import NewSessionModal from '$lib/components/NewSessionModal.svelte';
@@ -18,23 +20,16 @@
   import TmuxWindowPicker from '$lib/components/TmuxWindowPicker.svelte';
   import { handleTmuxPopState } from '$lib/stores/tmux.svelte.js';
 
-  let isMobile = $state(false);
+  let route = $state(null);
+  let routeError = $state(null);
+
+  function showNewSessionModal() {
+    newSessionModalOpen.set(true);
+  }
 
   onMount(() => {
-    // Check if mobile
-    isMobile = window.innerWidth <= 768;
-
-    // Listen for resize
-    const handleResize = () => {
-      isMobile = window.innerWidth <= 768;
-    };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('popstate', handleTmuxPopState);
-
-    // Connect WebSocket
-    connectWS();
-
-    // Subscribe to sortBy and groupByProject to reactively fetch sessions
+    const router = getBrowserRouter();
+    let routeGeneration = 0;
     let currentSortBy = 'last_updated';
     let currentGroupBy = false;
 
@@ -42,130 +37,100 @@
       fetchSessions(currentSortBy, currentGroupBy)
         .then(list => sessions.set(list))
         .catch(e => console.error('Failed to fetch sessions:', e));
-      // Refresh unread status (exclude the active session — user is already viewing it)
       fetchUnreadIds()
         .then(ids => {
-          const unsub = activeSession.subscribe(activeId => {
-            if (activeId) ids.delete(activeId);
-          });
-          unsub();
+          let activeId = null;
+          activeSession.subscribe(value => { activeId = value; })();
+          if (activeId) ids.delete(activeId);
           unreadSessionIds.set(ids);
         })
         .catch(() => {});
     }
+
+    async function applyRoute(nextRoute) {
+      const generation = ++routeGeneration;
+      route = nextRoute;
+      routeError = null;
+
+      if (nextRoute.name === RouteName.SESSIONS) {
+        clearCurrentSession();
+        return;
+      }
+
+      if (nextRoute.name === RouteName.NOT_FOUND) {
+        clearCurrentSession();
+        routeError = 'The requested page was not found.';
+        return;
+      }
+
+      let currentID = null;
+      activeSession.subscribe(value => { currentID = value; })();
+      // Idempotent route notifications (including tmux modal popstate entries)
+      // must not reload history for the already displayed session.
+      if (currentID === nextRoute.sessionId) return;
+
+      const result = await loadSession(nextRoute.sessionId);
+      if (generation !== routeGeneration || result.stale) return;
+      if (!result.ok) {
+        routeError = result.error?.status === 404 || result.error?.message === 'Session not found'
+          ? 'Session not found.'
+          : 'This session is unavailable.';
+      }
+    }
+
+    connectWS();
+    const unsubscribeRoute = router.subscribe(applyRoute);
+    window.addEventListener('popstate', handleTmuxPopState);
 
     const unsubscribeSort = sortBy.subscribe(value => {
       currentSortBy = value;
       refreshSessions();
     });
-
     const unsubscribeGroup = groupByProject.subscribe(value => {
       currentGroupBy = value;
       refreshSessions();
     });
 
-    // Sync RPC status from server (restores state after page reload)
     getRPCStatus()
       .then(data => {
         if (data.sessions) {
           for (const [sessionId, running] of Object.entries(data.sessions)) {
-            if (running) {
-              setRpcRunning(sessionId, true);
-            }
+            if (running) setRpcRunning(sessionId, true);
           }
         }
       })
       .catch(() => {});
 
-    // Re-subscribe to active session on reload (scrolls to bottom)
-    let savedSession = null;
-    activeSession.subscribe(id => { savedSession = id; })();
-    if (savedSession) {
-      const trySubscribe = () => {
-        let socket = null;
-        ws.subscribe(s => { socket = s; })();
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: 'subscribe', session_id: savedSession }));
-          userScrolledUp.set(false);
-          newMessageCount.set(0);
-        } else {
-          // WS not ready yet, retry after a short delay
-          setTimeout(trySubscribe, 200);
-        }
-      };
-      trySubscribe();
-    }
-
-    // Refresh sessions periodically
-    const interval = setInterval(() => {
-      fetchSessions(currentSortBy, currentGroupBy)
-        .then(list => sessions.set(list))
-        .catch(() => {});
-      // Refresh unread status (exclude the active session — user is already viewing it)
-      fetchUnreadIds()
-        .then(ids => {
-          const unsub = activeSession.subscribe(activeId => {
-            if (activeId) ids.delete(activeId);
-          });
-          unsub();
-          unreadSessionIds.set(ids);
-        })
-        .catch(() => {});
-    }, 5000);
+    const interval = setInterval(refreshSessions, 5000);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('resize', handleResize);
+      unsubscribeRoute();
+      router.destroy();
       window.removeEventListener('popstate', handleTmuxPopState);
       unsubscribeSort();
       unsubscribeGroup();
     };
   });
-
-  function showNewSessionModal() {
-    newSessionModalOpen.set(true);
-  }
-
 </script>
 
-<div class="flex h-screen">
-  <!-- Sidebar overlay (mobile) -->
-  {#if isMobile}
-    <div
-      class="fixed inset-0 bg-black/50 z-40"
-      class:hidden={!$sidebarOpen}
-      onclick={() => sidebarOpen.set(false)}
-    ></div>
-  {/if}
+<Tooltip.Provider delayDuration={500}>
+  <div class="app-shell flex min-h-[100dvh] h-[100dvh] w-full min-w-0 bg-ctp-crust pb-[env(safe-area-inset-bottom)]">
+    {#if route?.name === RouteName.SESSIONS}
+      <SessionLanding onNewSession={showNewSessionModal} />
+    {:else if route?.name === RouteName.SESSION && !routeError}
+      <div class="flex min-w-0 flex-1 flex-col">
+        <HeaderBar />
+        <ChatArea />
+      </div>
+    {:else if route?.name === RouteName.NOT_FOUND || routeError}
+      <RouteError message={routeError || 'The requested page was not found.'} />
+    {/if}
 
-  <!-- Sidebar -->
-  <div
-    class="h-full fixed top-0 left-0 z-50 transition-transform duration-300 ease md:relative"
-    class:translate-x-0={isMobile && $sidebarOpen}
-    class:translate-x-[-280px]={isMobile && !$sidebarOpen}
-  >
-    <Sidebar onNewSession={showNewSessionModal} />
+    <NewSessionModal />
+    <ToastContainer />
+    <TmuxSessionPicker />
+    <TmuxTerminalModal />
+    <TmuxWindowPicker />
   </div>
-
-  <!-- Main -->
-  <div class="flex-1 flex flex-col w-full min-w-0">
-    <HeaderBar />
-    <ChatArea />
-  </div>
-
-  <!-- New Session Modal -->
-  <NewSessionModal />
-
-  <!-- Toast Container -->
-  <ToastContainer />
-
-  <!-- tmux Session Picker -->
-  <TmuxSessionPicker />
-
-  <!-- tmux Terminal Modal -->
-  <TmuxTerminalModal />
-
-  <!-- tmux Window Picker -->
-  <TmuxWindowPicker />
-
-</div>
+</Tooltip.Provider>

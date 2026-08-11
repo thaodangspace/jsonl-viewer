@@ -1,9 +1,17 @@
 <script>
   import { sessions, activeSession, unreadSessionIds } from '$lib/stores/session.svelte.js';
-  import { sidebarOpen, groupByProject, sortBy } from '$lib/stores/ui.svelte.js';
+  import { groupByProject, sortBy } from '$lib/stores/ui.svelte.js';
   import { selectSession } from '$lib/actions/session.js';
   import { openTmuxSessionPicker } from '$lib/stores/tmux.svelte.js';
-  import { Zap, FolderOpen, List, Clock, Type, Plus, Terminal, X, ChevronDown, ChevronRight } from '@lucide/svelte';
+  import Zap from '~icons/lucide/zap';
+  import FolderOpen from '~icons/lucide/folder-open';
+  import List from '~icons/lucide/list';
+  import Clock from '~icons/lucide/clock';
+  import Type from '~icons/lucide/type';
+  import Plus from '~icons/lucide/plus';
+  import Terminal from '~icons/lucide/terminal';
+  import ChevronDown from '~icons/lucide/chevron-down';
+  import ChevronRight from '~icons/lucide/chevron-right';
 
   let { onNewSession } = $props();
 
@@ -86,8 +94,9 @@
 </script>
 
 {#snippet sessionItem(session)}
-  <div
-    class="session-item px-4 py-2.5 border-b border-ctp-surface0 cursor-pointer transition-colors duration-150 hover:bg-ctp-surface1 {$activeSession === session.id ? 'active' : ''}"
+  <button
+    type="button"
+    class="session-item w-full min-h-11 px-4 py-2.5 border-b border-ctp-surface0 text-left cursor-pointer transition-colors duration-150 hover:bg-ctp-surface1 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ctp-blue {$activeSession === session.id ? 'active' : ''}"
     onclick={() => selectSession(session.id)}
   >
     <div class="flex items-center justify-between">
@@ -112,17 +121,19 @@
         <span class="text-[10px] text-ctp-blue">{session.model}</span>
       {/if}
     </div>
-  </div>
+  </button>
 {/snippet}
 
-<div class="w-[280px] h-full bg-ctp-mantle border-r border-ctp-surface0 flex flex-col">
+<main class="w-full h-full min-h-0 bg-ctp-mantle flex flex-col max-w-5xl mx-auto">
   <div class="p-4 border-b border-ctp-surface0 text-sm font-semibold text-ctp-blue flex items-center justify-between" style="background:color-mix(in srgb, #135ce0 4%, #ffffff)">
     <span class="flex items-center gap-1.5"><Zap size={14} /> Sessions{#if $unreadSessionIds.size > 0}<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-ctp-rosewater text-ctp-mantle">{$unreadSessionIds.size}</span>{/if}</span>
     <div class="flex items-center gap-1">
       <button
-        class="text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer"
+        type="button"
+        class="min-h-11 min-w-11 text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-blue"
         onclick={() => groupByProject.update(v => !v)}
         title={$groupByProject ? "Switch to flat list" : "Group by project"}
+        aria-label={$groupByProject ? "Switch to flat session list" : "Group sessions by project"}
       >
         {#if $groupByProject}
           <List size={14} />
@@ -131,9 +142,11 @@
         {/if}
       </button>
       <button
-        class="text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer"
+        type="button"
+        class="min-h-11 min-w-11 text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-blue"
         onclick={() => sortBy.update(s => s === 'last_updated' ? 'alphabetical' : 'last_updated')}
         title={$sortBy === 'last_updated' ? "Sort: Last Updated" : "Sort: A-Z"}
+        aria-label={$sortBy === 'last_updated' ? "Sort sessions by last updated" : "Sort sessions alphabetically"}
       >
         {#if $sortBy === 'last_updated'}
           <Clock size={14} />
@@ -142,24 +155,22 @@
         {/if}
       </button>
       <button
-        class="text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer"
+        type="button"
+        class="min-h-11 min-w-11 text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-blue"
         onclick={onNewSession}
         title="New Session"
+        aria-label="Create new session"
       >
         <Plus size={14} />
       </button>
       <button
-        class="text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer"
+        type="button"
+        class="min-h-11 min-w-11 text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-blue"
         onclick={openTmuxSessionPicker}
         title="Connect to tmux session"
+        aria-label="Connect to tmux session"
       >
         <Terminal size={14} />
-      </button>
-      <button
-        class="md:hidden text-ctp-overlay0 hover:text-ctp-text flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer"
-        onclick={() => sidebarOpen.set(false)}
-      >
-        <X size={14} />
       </button>
     </div>
   </div>
@@ -174,7 +185,7 @@
       {#each groupedSessions as { cwd, sessions: cwdSessions, unreadCount } (cwd)}
         <div class="project-group">
           <button
-            class="w-full px-4 py-2 text-xs font-semibold text-ctp-subtext0 flex items-center justify-between hover:bg-ctp-surface1 cursor-pointer border-b border-ctp-surface0"
+            class="w-full min-h-11 px-4 py-2 text-xs font-semibold text-ctp-subtext0 flex items-center justify-between hover:bg-ctp-surface1 cursor-pointer border-b border-ctp-surface0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ctp-blue"
             onclick={() => toggleProjectGroup(cwd)}
           >
             <span class="truncate">{cwd} ({cwdSessions.length})</span>
@@ -192,7 +203,7 @@
             {/each}
             {#if cwdSessions.length > getProjectLimit(cwd)}
               <button
-                class="w-full text-center py-2 text-[11px] text-ctp-blue hover:bg-ctp-surface1 cursor-pointer transition-colors duration-150 border-b border-ctp-surface0 font-medium"
+                class="w-full min-h-11 text-center py-2 text-[11px] text-ctp-blue hover:bg-ctp-surface1 cursor-pointer transition-colors duration-150 border-b border-ctp-surface0 font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ctp-blue"
                 onclick={() => loadMoreSessions(cwd)}
               >
                 Load More ({cwdSessions.length - getProjectLimit(cwd)} remaining)
@@ -208,7 +219,7 @@
       {/each}
     {/if}
   </div>
-</div>
+</main>
 
 <style>
   .session-item.active {

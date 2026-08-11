@@ -6,7 +6,9 @@
   import ToolCallBlock from './ToolCallBlock.svelte';
   import ImageViewer from './ImageViewer.svelte';
   import { applyCollapseDefault, toggleCollapseState } from '$lib/stores/collapseState.js';
-  import { ChevronRight, ChevronDown, Wrench } from '@lucide/svelte';
+  import ChevronRight from '~icons/lucide/chevron-right';
+  import ChevronDown from '~icons/lucide/chevron-down';
+  import Wrench from '~icons/lucide/wrench';
 
   let { msg } = $props();
 

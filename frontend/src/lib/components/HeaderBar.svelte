@@ -2,11 +2,11 @@
   import { onMount } from 'svelte';
   import { wsConnected } from '$lib/stores/ws.svelte.js';
   import { activeSession, sessions } from '$lib/stores/session.svelte.js';
-  import { sidebarOpen } from '$lib/stores/ui.svelte.js';
-  import { quitSession } from '$lib/actions/session.js';
-  import { createSession, fetchSessions } from '$lib/api/sessions.js';
-  import { selectSession } from '$lib/actions/session.js';
-  import { Menu, Plus, Info } from '@lucide/svelte';
+  import { quitSession, navigateHome, selectSession } from '$lib/actions/session.js';
+  import { createSession, fetchSession, fetchSessions } from '$lib/api/sessions.js';
+  import ArrowLeft from '~icons/lucide/arrow-left';
+  import Plus from '~icons/lucide/plus';
+  import Info from '~icons/lucide/info';
   import SessionInfoModal from './SessionInfoModal.svelte';
 
   let sessionInfo = $state(null);
@@ -15,8 +15,7 @@
 
   function fetchSessionInfo(id) {
     if (id) {
-      fetch(`/api/sessions/${id}`)
-        .then(r => r.json())
+      fetchSession(id)
         .then(data => { sessionInfo = data; })
         .catch(() => { sessionInfo = null; });
     } else {
@@ -29,11 +28,10 @@
     creating = true;
     try {
       const data = await createSession(sessionInfo.cwd);
-      const list = await fetchSessions();
-      sessions.set(list);
       if (data.session_id) {
-        setTimeout(() => selectSession(data.session_id), 300);
+        selectSession(data.session_id);
       }
+      fetchSessions().then(list => sessions.set(list)).catch(() => {});
     } catch (e) {
       console.error('Failed to create session:', e);
     } finally {
@@ -56,6 +54,16 @@
 </script>
 
 <div class="px-5 py-2.5 border-b border-ctp-crust flex items-center gap-3 bg-ctp-mantle flex-wrap">
+  <button
+    type="button"
+    class="min-h-11 px-3 rounded-md text-xs font-semibold text-ctp-blue hover:bg-ctp-blue/10 focus:outline-none focus:ring-2 focus:ring-ctp-blue/60 inline-flex items-center gap-1.5"
+    onclick={navigateHome}
+    aria-label="Back to sessions"
+  >
+    <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+    <span>Sessions</span>
+  </button>
+
   <div
     class="w-2 h-2 rounded-full transition-colors duration-300"
     style="background: {$wsConnected ? '#65b73b' : '#e95f59'}"
@@ -72,9 +80,11 @@
         </span>
       {/if}
       <button
-        class="p-1 rounded-md text-ctp-overlay0 hover:text-ctp-blue hover:bg-ctp-blue/10 transition-all cursor-pointer flex items-center justify-center shrink-0 animate-fadeIn"
+        type="button"
+        class="min-h-11 min-w-11 p-1 rounded-md text-ctp-overlay0 hover:text-ctp-blue hover:bg-ctp-blue/10 transition-all cursor-pointer flex items-center justify-center shrink-0 animate-fadeIn focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-blue"
         onclick={() => infoModalOpen = true}
         title="Show Session Info"
+        aria-label="Show session info"
       >
         <Info size={14} />
       </button>
@@ -91,7 +101,7 @@
 
   {#if sessionInfo?.cwd && sessionInfo?.agent === 'pi'}
     <button
-      class="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-ctp-green/12 text-ctp-green hover:bg-ctp-green/20 transition-colors inline-flex items-center gap-1"
+      class="min-h-11 px-3 rounded-md text-[11px] font-semibold bg-ctp-green/12 text-ctp-green hover:bg-ctp-green/20 transition-colors inline-flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-green"
       disabled={creating}
       onclick={handleNewSession}
       title="New session in {sessionInfo.cwd}"
@@ -107,20 +117,13 @@
 
   {#if $activeSession && sessionInfo?.agent === 'pi'}
     <button
-      class="px-3 py-1 rounded-md text-xs font-semibold bg-ctp-red/15 text-ctp-red hover:bg-ctp-red/25 transition-colors"
+      class="min-h-11 px-3 rounded-md text-xs font-semibold bg-ctp-red/15 text-ctp-red hover:bg-ctp-red/25 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-red"
       onclick={quitSession}
     >
       Quit Session
     </button>
   {/if}
 
-  <!-- Mobile hamburger -->
-  <button
-    class="md:hidden absolute top-2.5 left-2.5 z-[60] p-1.5 rounded-md bg-ctp-crust text-ctp-text hover:bg-ctp-surface0"
-    onclick={() => sidebarOpen.update(v => !v)}
-  >
-    <Menu class="h-4 w-4" />
-  </button>
 </div>
 
 <SessionInfoModal show={infoModalOpen} sessionInfo={sessionInfo} onClose={() => infoModalOpen = false} />

@@ -1,29 +1,39 @@
 <script>
+  import { Command } from 'bits-ui';
   import { browseFS, searchFS } from '$lib/api/fs.js';
-  import { Folder, CornerUpLeft, FileCode, Settings, FileText, FileImage, Terminal, File } from '@lucide/svelte';
+  import Folder from '~icons/lucide/folder';
+  import CornerUpLeft from '~icons/lucide/corner-up-left';
+  import FileCode from '~icons/lucide/file-code';
+  import Settings from '~icons/lucide/settings';
+  import FileText from '~icons/lucide/file-text';
+  import FileImage from '~icons/lucide/file-image';
+  import Terminal from '~icons/lucide/terminal';
+  import File from '~icons/lucide/file';
 
   let { value, onSelect, onClose } = $props();
 
   let entries = $state([]);
   let loading = $state(false);
-  let selectedIndex = $state(0);
   let currentDir = $state('');
   let showPicker = $state(false);
   let pickerTop = $state(0);
   let pickerLeft = $state(0);
   let pickerWidth = $state(0);
+  let selectedValue = $state('');
+
+  // Stable value keys for entries
+  let entryKeys = $derived(entries.map((e, i) => `${e.path || e.name}-${i}`));
 
   // Calculate position relative to the input element
   function updatePosition() {
     const inputEl = document.querySelector('.path-picker-input');
     if (!inputEl) return;
     const rect = inputEl.getBoundingClientRect();
-    pickerTop = rect.bottom + 4; // 4px gap below input
+    pickerTop = rect.bottom + 4;
     pickerLeft = rect.left;
     pickerWidth = rect.width;
   }
 
-  // Build an "Up" entry
   function buildUpEntry(dir) {
     if (!dir || dir === '.' || dir === '/') return null;
     const parent = dir.replace(/\/[^/]+\/?$/, '') || '/';
@@ -33,14 +43,9 @@
   function resolveCurrentDir(input) {
     if (!input || input.trim() === '') return '.';
     const trimmed = input.trim();
-
-    // If it ends with /, it's clearly a directory path to browse
     if (trimmed.endsWith('/')) return trimmed;
-
-    // Try to extract directory part
     const lastSlash = trimmed.lastIndexOf('/');
-    if (lastSlash <= 0) return '.'; // no meaningful directory
-
+    if (lastSlash <= 0) return '.';
     return trimmed.substring(0, lastSlash + 1);
   }
 
@@ -54,7 +59,9 @@
       if (result.success) {
         const upEntry = buildUpEntry(dirPath);
         entries = upEntry ? [upEntry, ...(result.entries || [])] : (result.entries || []);
-        selectedIndex = 0;
+        if (entries.length > 0) {
+          selectedValue = `${entries[0].path || entries[0].name}-0`;
+        }
       } else {
         entries = [];
       }
@@ -69,7 +76,6 @@
   async function handleValueChange() {
     const trimmed = value.trim();
 
-    // Empty input → show allowed roots
     if (!trimmed) {
       currentDir = '.';
       loadEntries('.');
@@ -78,14 +84,12 @@
 
     const dir = resolveCurrentDir(trimmed);
 
-    // If the directory changed, browse it
     if (dir !== currentDir) {
       currentDir = dir;
       loadEntries(dir);
       return;
     }
 
-    // Same directory but maybe user is typing a subdirectory name
     const lastSlash = trimmed.lastIndexOf('/');
     if (lastSlash > 0) {
       const partial = trimmed.slice(lastSlash + 1).toLowerCase();
@@ -96,7 +100,9 @@
         );
         if (filtered.length > 0 && filtered.length < entries.length) {
           entries = filtered;
-          selectedIndex = 0;
+          if (entries.length > 0) {
+            selectedValue = `${entries[0].path || entries[0].name}-0`;
+          }
           showPicker = true;
           updatePosition();
         } else if (entries.length > 0) {
@@ -117,7 +123,6 @@
     }
   }
 
-  // React to value changes
   $effect(() => {
     const _ = value;
     handleValueChange();
@@ -126,42 +131,38 @@
   function selectEntry(entry, keepOpen = false) {
     if (entry.is_dir) {
       if (keepOpen) {
-        // Tab: navigate into directory and keep browsing
         value = entry.path.endsWith('/') ? entry.path : entry.path + '/';
         return;
       }
-      // Enter: fill directory path and close picker
       value = entry.path.endsWith('/') ? entry.path : entry.path + '/';
       showPicker = false;
       onSelect(entry.path);
     } else {
-      // For files, close and submit
       onSelect(entry.path);
     }
-  }
-
-  function navigateUp() {
-    if (entries.length === 0) return;
-    selectedIndex = (selectedIndex - 1 + entries.length) % entries.length;
-  }
-
-  function navigateDown() {
-    if (entries.length === 0) return;
-    selectedIndex = (selectedIndex + 1) % entries.length;
   }
 
   function handleKeydown(e) {
     if (!showPicker && entries.length === 0 && !loading) return false;
 
+    const idx = entryKeys.indexOf(selectedValue);
+
     if (e.key === 'ArrowDown') {
-      e.preventDefault(); e.stopPropagation(); navigateDown(); return true;
+      e.preventDefault(); e.stopPropagation();
+      const nextIdx = (idx + 1) % entryKeys.length;
+      selectedValue = entryKeys[nextIdx];
+      return true;
     }
     if (e.key === 'ArrowUp') {
-      e.preventDefault(); e.stopPropagation(); navigateUp(); return true;
+      e.preventDefault(); e.stopPropagation();
+      const nextIdx = (idx - 1 + entryKeys.length) % entryKeys.length;
+      selectedValue = entryKeys[nextIdx];
+      return true;
     }
     if (e.key === 'Enter' && entries.length > 0) {
       e.preventDefault(); e.stopPropagation();
-      selectEntry(entries[selectedIndex], false); // Enter fills and closes
+      const entry = entries[Math.max(0, idx)];
+      if (entry) selectEntry(entry, false);
       return true;
     }
     if (e.key === 'Escape') {
@@ -171,7 +172,8 @@
     }
     if (e.key === 'Tab' && entries.length > 0) {
       e.preventDefault(); e.stopPropagation();
-      selectEntry(entries[selectedIndex], true); // Tab fills and keeps open
+      const entry = entries[Math.max(0, idx)];
+      if (entry) selectEntry(entry, true);
       return true;
     }
     return false;
@@ -193,10 +195,9 @@
     if (scriptExts.includes(ext)) return Terminal;
     return File;
   }
- 
+
   let show = $derived(showPicker || loading);
- 
-  // Update position on window resize, close on scroll
+
   $effect(() => {
     if (!showPicker) return;
     updatePosition();
@@ -209,13 +210,17 @@
       window.removeEventListener('scroll', onScroll, true);
     };
   });
- 
+
   export { handleKeydown, show };
 </script>
- 
+
 {#if show}
-  <div
-    class="path-picker fixed bg-ctp-mantle border border-ctp-surface0 rounded-lg shadow-lg overflow-hidden z-[9999] max-h-60 overflow-y-auto"
+  <Command.Root
+    value={selectedValue}
+    onValueChange={(v) => { if (v) selectedValue = v; }}
+    shouldFilter={false}
+    loop
+    class="path-picker fixed bg-ctp-mantle border border-ctp-surface0 rounded-lg shadow-lg overflow-hidden z-[9999]"
     style="top: {pickerTop}px; left: {pickerLeft}px; width: {pickerWidth}px;"
   >
     {#if loading}
@@ -232,28 +237,31 @@
         <span>{currentDir === '.' ? 'Allowed roots' : currentDir} — ↑↓ navigate, ↵ select, tab autocomplete</span>
         <span>{entries.length} items</span>
       </div>
-      {#each entries as entry, i}
-        {@const Icon = entryIcon(entry)}
-        <button
-          class="w-full px-3 py-1.5 text-left flex items-center gap-2 transition-colors hover:bg-ctp-surface0/70 cursor-pointer"
-          class:bg-ctp-surface0={i === selectedIndex}
-          onclick={() => selectEntry(entry, false)}
-          onmouseenter={() => selectedIndex = i}
-        >
-          <span class="text-xs shrink-0 flex items-center justify-center text-ctp-overlay1">
-            <Icon size={14} />
-          </span>
-          <div class="flex-1 min-w-0">
-            <div class="text-xs font-mono truncate {entry.is_dir ? 'text-ctp-blue font-semibold' : 'text-ctp-text'}">{entry.name}</div>
-            {#if entry.size}
-              <div class="text-[9px] text-ctp-overlay1">{Math.round(entry.size / 1024)}KB</div>
-            {/if}
-          </div>
-          {#if entry.is_dir && entry.name !== '..'}
-            <span class="text-[9px] text-ctp-overlay1 shrink-0">dir ↩</span>
-          {/if}
-        </button>
-      {/each}
+      <Command.List class="max-h-60 overflow-y-auto">
+        <Command.Viewport>
+          {#each entries as entry, i}
+            {@const Icon = entryIcon(entry)}
+            <Command.Item
+              value={entryKeys[i]}
+              class="w-full px-3 py-1.5 text-left flex items-center gap-2 transition-colors cursor-pointer data-[selected]:bg-ctp-surface0/70"
+              onclick={() => selectEntry(entry, false)}
+            >
+              <span class="text-xs shrink-0 flex items-center justify-center text-ctp-overlay1">
+                <Icon size={14} />
+              </span>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-mono truncate {entry.is_dir ? 'text-ctp-blue font-semibold' : 'text-ctp-text'}">{entry.name}</div>
+                {#if entry.size}
+                  <div class="text-[9px] text-ctp-overlay1">{Math.round(entry.size / 1024)}KB</div>
+                {/if}
+              </div>
+              {#if entry.is_dir && entry.name !== '..'}
+                <span class="text-[9px] text-ctp-overlay1 shrink-0">dir ↩</span>
+              {/if}
+            </Command.Item>
+          {/each}
+        </Command.Viewport>
+      </Command.List>
     {/if}
-  </div>
+  </Command.Root>
 {/if}
