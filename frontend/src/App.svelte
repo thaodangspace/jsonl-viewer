@@ -115,7 +115,7 @@
 </script>
 
 <Tooltip.Provider delayDuration={500}>
-  <div class="app-shell flex min-h-[100dvh] h-[100dvh] w-full min-w-0 bg-ctp-crust pb-[env(safe-area-inset-bottom)]">
+  <div class="app-shell flex min-h-[100dvh] h-[100dvh] w-full min-w-0 bg-ctp-mantle pb-[env(safe-area-inset-bottom)]">
     {#if route?.name === RouteName.SESSIONS}
       <SessionLanding onNewSession={showNewSessionModal} />
     {:else if route?.name === RouteName.SESSION && !routeError}
