@@ -65,15 +65,12 @@ internal/
   watcher/          — Filesystem watchers (pi, claude, codex)
   jsonl/            — Agent-specific JSONL decoders
   server/           — HTTP server, API handlers
-  rpc/              — RPC session management
   readtracker/      — Session read tracking (SQLite)
-  tmux/             — tmux session attachment
   llm/              — Local LLM client (translation)
-  fsbrowse/         — Filesystem browsing service
 frontend/src/lib/
   history/          — Lazy-load history state, transform, dedup
   stores/           — Svelte writable stores
-  actions/          — Session selection, RPC actions
+  actions/          — Session selection and navigation
   components/       — UI components
   api/              — API client functions
   utils/            — Scroll, language detection, events

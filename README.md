@@ -1,6 +1,6 @@
 # JSONL Viewer
 
-JSONL Viewer is a desktop and browser app for browsing and interacting with coding-agent sessions from Pi, Claude Code, and Codex.
+JSONL Viewer is a read-only desktop and browser app for browsing coding-agent sessions from Pi, Claude Code, and Codex.
 
 ## Screenshots
 

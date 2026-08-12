@@ -1,7 +1,5 @@
 import { writable } from 'svelte/store';
 
-export const newSessionModalOpen = writable(false);
-
 // Restore from localStorage, default to false
 function getInitialGroupByProject() {
   try {

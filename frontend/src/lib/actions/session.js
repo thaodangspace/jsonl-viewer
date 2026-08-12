@@ -4,8 +4,6 @@ import { fetchSession, fetchSessions, markSessionRead } from '$lib/api/sessions.
 import { clearSeenEvents, setActiveSessionID } from '$lib/utils/events.js';
 import { clearCollapseState } from '$lib/stores/collapseState.js';
 import { ws } from '$lib/stores/ws.svelte.js';
-import { stopRPC } from '$lib/api/rpc.js';
-import { isRpcRunning, setRpcRunning } from '$lib/stores/rpc.svelte.js';
 import { beginInitialHistoryLoad, loadInitialHistory, resetHistory } from '$lib/history/state.svelte.js';
 import { navigateTo, RouteName } from '$lib/routing/router.js';
 import { tick } from 'svelte';
@@ -24,7 +22,7 @@ function clearDetailState() {
   newMessageCount.set(0);
 }
 
-/** Clear detail state without stopping the session's RPC process. */
+/** Clear detail state when leaving the selected session. */
 export function clearCurrentSession() {
   lifecycleGeneration += 1;
   clearDetailState();
@@ -98,22 +96,6 @@ export function selectSession(id) {
 /** User-initiated navigation back to the session landing route. */
 export function navigateHome() {
   return navigateTo({ name: RouteName.SESSIONS });
-}
-
-export async function quitSession() {
-  let currentActive = null;
-  activeSession.subscribe(v => { currentActive = v; })();
-  if (!currentActive) return;
-  if (!confirm('Quit this session? This will stop the RPC process.')) return;
-
-  if (isRpcRunning(currentActive)) {
-    try { await stopRPC(currentActive); } catch {}
-    setRpcRunning(currentActive, false);
-  }
-
-  // The route transition owns cleanup. This also preserves the RPC process
-  // when users merely navigate back to the landing page.
-  navigateHome();
 }
 
 export async function refreshSessions() {

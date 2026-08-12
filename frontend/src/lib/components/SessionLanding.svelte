@@ -2,18 +2,13 @@
   import { sessions, activeSession, unreadSessionIds } from '$lib/stores/session.svelte.js';
   import { groupByProject, sortBy } from '$lib/stores/ui.svelte.js';
   import { selectSession } from '$lib/actions/session.js';
-  import { openTmuxSessionPicker } from '$lib/stores/tmux.svelte.js';
   import Zap from '~icons/lucide/zap';
   import FolderOpen from '~icons/lucide/folder-open';
   import List from '~icons/lucide/list';
   import Clock from '~icons/lucide/clock';
   import Type from '~icons/lucide/type';
-  import Plus from '~icons/lucide/plus';
-  import Terminal from '~icons/lucide/terminal';
   import ChevronDown from '~icons/lucide/chevron-down';
   import ChevronRight from '~icons/lucide/chevron-right';
-
-  let { onNewSession } = $props();
 
   let expandedProjects = $state({});
   let projectSessionLimits = $state({});
@@ -153,24 +148,6 @@
         {:else}
           <Type size={14} />
         {/if}
-      </button>
-      <button
-        type="button"
-        class="min-h-11 min-w-11 text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-blue"
-        onclick={onNewSession}
-        title="New Session"
-        aria-label="Create new session"
-      >
-        <Plus size={14} />
-      </button>
-      <button
-        type="button"
-        class="min-h-11 min-w-11 text-ctp-green hover:text-ctp-teal flex items-center justify-center p-1 rounded hover:bg-ctp-surface0/50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ctp-blue"
-        onclick={openTmuxSessionPicker}
-        title="Connect to tmux session"
-        aria-label="Connect to tmux session"
-      >
-        <Terminal size={14} />
       </button>
     </div>
   </div>

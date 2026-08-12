@@ -1,7 +1,8 @@
 <script>
   import { formatText, escapeHTML } from '$lib/utils/markdown.js';
   import { extractImagePaths } from '$lib/utils/images.js';
-  import { imageViewUrl, translateText } from '$lib/api/rpc.js';
+  import { imageViewUrl } from '$lib/api/images.js';
+  import { translateText } from '$lib/api/translate.js';
   import ThinkingBlock from './ThinkingBlock.svelte';
   import ToolCallBlock from './ToolCallBlock.svelte';
   import ImageViewer from './ImageViewer.svelte';

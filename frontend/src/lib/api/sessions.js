@@ -15,16 +15,6 @@ export async function fetchSession(id) {
   return res.json();
 }
 
-export async function createSession(cwd) {
-  const res = await fetch('/api/sessions/create', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cwd }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
 export async function fetchUnreadIds() {
   const res = await fetch('/api/sessions/unread');
   if (!res.ok) throw new Error('Failed to fetch unread IDs');

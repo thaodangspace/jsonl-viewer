@@ -1,6 +1,5 @@
 import { messages } from '$lib/stores/messages.svelte.js';
 import { activeSession, sessions } from '$lib/stores/session.svelte.js';
-import { isStreaming } from '$lib/stores/rpc.svelte.js';
 import { fetchSessions } from '$lib/api/sessions.js';
 import { detectLanguageFromPath } from '$lib/utils/language.js';
 import { unescapeJsonString } from '$lib/utils/json.js';
@@ -92,11 +91,7 @@ export function onWSMessage(msg) {
   switch (data.type) {
     case 'agent_start':
     case 'turn_start':
-      isStreaming.set(true);
-      break;
-
     case 'agent_end':
-      isStreaming.set(false);
       break;
 
     case 'message_update': {
@@ -223,7 +218,6 @@ function appendToCurrentAssistant(ev) {
       return m;
     }));
   } else if (ev.type === 'done') {
-    isStreaming.set(false);
     currentAssistantId = null;
   }
 }
@@ -374,14 +368,6 @@ function renderLegacyMessage(data) {
       }];
     });
   }
-}
-
-export function addSystemMessage(text) {
-  messages.update(msgs => [...msgs, {
-    id: generateId(),
-    role: 'system',
-    content: text,
-  }]);
 }
 
 function extractText(content) {

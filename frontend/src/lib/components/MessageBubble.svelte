@@ -1,7 +1,7 @@
 <script>
   import { formatText } from '$lib/utils/markdown.js';
   import { extractImagePaths, stripImageBoilerplate } from '$lib/utils/images.js';
-  import { imageViewUrl } from '$lib/api/rpc.js';
+  import { imageViewUrl } from '$lib/api/images.js';
   import ImageViewer from './ImageViewer.svelte';
 
   let { msg } = $props();
