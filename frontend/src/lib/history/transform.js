@@ -78,8 +78,10 @@ export function transformEventsToMessages(events) {
             result.push(msgObj);
           }
         } else if (msg.role === 'toolResult') {
-          const tc = buildToolResult(msg);
-          if (tc) result.push(tc);
+          const toolResult = buildToolResult(msg);
+          if (toolResult && !attachToolResult(result, toolResult)) {
+            result.push(toolResult);
+          }
         }
         break;
       }
@@ -235,6 +237,37 @@ function buildToolResult(msg) {
   };
 }
 
+// Attach a result to its call so the call and output render as one component.
+// Tool results normally arrive after the assistant message has completed, so
+// search backwards rather than relying on the current assistant state.
+function attachToolResult(messages, toolResult) {
+  if (!toolResult.toolCallId) return false;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+
+    const toolCalls = message.toolCalls || [];
+    if (!toolCalls.some(tc => tc.id === toolResult.toolCallId)) continue;
+
+    messages[i] = {
+      ...message,
+      toolCalls: toolCalls.map(tc => tc.id === toolResult.toolCallId
+        ? {
+            ...tc,
+            result: toolResult.content,
+            resultIsError: toolResult.isError,
+            resultFilePath: toolResult.filePath,
+            resultLanguage: toolResult.language,
+          }
+        : tc),
+    };
+    return true;
+  }
+
+  return false;
+}
+
 // --- legacy message ---
 
 function renderLegacyMessage(result, data) {
@@ -288,8 +321,9 @@ function renderLegacyMessage(result, data) {
       timestamp: time,
     });
   } else if (role === 'toolResult') {
-    // Legacy tool results are attached inline — handled as regular messages
-    const tc = buildToolResult(msg);
-    if (tc) result.push(tc);
+    const toolResult = buildToolResult(msg);
+    if (toolResult && !attachToolResult(result, toolResult)) {
+      result.push(toolResult);
+    }
   }
 }
